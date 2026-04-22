@@ -137,6 +137,30 @@ const router = new Hono<{ Variables: Variables }>()
 
     return c.json({ created, errors }, 201);
   })
+  .post('/analyze-all', async (c) => {
+    const db = c.var.db;
+    const activeUrls = await db.select().from(urls).where(eq(urls.isActive, true));
+
+    const enqueue = c.var.enqueueAnalysis;
+    if (enqueue) {
+      await Promise.all(activeUrls.map((u) => enqueue(u.id, u.url)));
+      return c.json({ queued: activeUrls.length });
+    }
+
+    // Node.js fallback: process in batches of 3 to respect rate limits
+    const CONCURRENCY = 3;
+    (async () => {
+      for (let i = 0; i < activeUrls.length; i += CONCURRENCY) {
+        await Promise.all(
+          activeUrls.slice(i, i + CONCURRENCY).map((u) =>
+            analyzeUrl(db, u.id, u.url, c.var.apiKey).catch(console.error),
+          ),
+        );
+      }
+    })().catch(console.error);
+
+    return c.json({ started: activeUrls.length });
+  })
   .put('/:id', zValidator('json', updateSchema), async (c) => {
     const db = c.var.db;
     const id = Number(c.req.param('id'));

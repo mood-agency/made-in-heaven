@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useUrls, useAnalyze, useDeleteUrl, useUpdateUrl, type Url } from '@/api';
+import { useUrls, useAnalyze, useAnalyzeAll, useDeleteUrl, useUpdateUrl, type Url } from '@/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
 import UrlTable from '@/components/UrlTable';
 import { arrayMove } from '@dnd-kit/sortable';
-import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2 } from 'lucide-react';
+import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play } from 'lucide-react';
 
 type ViewMode = 'grid' | 'table';
 type SortMode = 'manual' | 'alpha' | 'mobile' | 'desktop';
@@ -30,6 +30,7 @@ function timeAgo(date: string | null) {
 export default function Dashboard() {
   const { data: urls, isLoading } = useUrls();
   const analyze = useAnalyze();
+  const analyzeAll = useAnalyzeAll();
   const deleteUrl = useDeleteUrl();
   const updateUrl = useUpdateUrl();
 
@@ -50,6 +51,17 @@ export default function Dashboard() {
   function changeSort(mode: SortMode) {
     setSortMode(mode);
     localStorage.setItem('psi-sort', mode);
+  }
+
+  async function handleAnalyzeAll() {
+    try {
+      const data = await analyzeAll.mutateAsync();
+      const count = data.queued ?? data.started ?? 0;
+      const verb = data.queued !== undefined ? 'queued' : 'started';
+      toast.success(`${count} URL${count !== 1 ? 's' : ''} ${verb} for analysis`);
+    } catch (err) {
+      toast.error(String(err));
+    }
   }
 
   async function handleAnalyze(id: number) {
@@ -171,6 +183,15 @@ export default function Dashboard() {
             </button>
           </div>
 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAnalyzeAll}
+            disabled={analyzeAll.isPending || (urls?.length ?? 0) === 0}
+          >
+            <Play className="size-3.5" data-icon="inline-start" />
+            {analyzeAll.isPending ? 'Queuing…' : 'Run All'}
+          </Button>
           <BulkImportDialog />
           <AddUrlDialog />
         </div>

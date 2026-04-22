@@ -121,6 +121,21 @@ export function useAnalyze() {
   });
 }
 
+export function useAnalyzeAll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await throwIfError(await rpc.api.urls['analyze-all'].$post());
+      return res.json() as Promise<{ queued?: number; started?: number }>;
+    },
+    onSuccess: (data) => {
+      const count = data.queued ?? data.started ?? 0;
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['urls'] }), 15000);
+      return count;
+    },
+  });
+}
+
 export function useBulkImport() {
   const qc = useQueryClient();
   return useMutation({
