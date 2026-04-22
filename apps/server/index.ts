@@ -6,6 +6,7 @@ import { logger } from 'hono/logger';
 import urlsRouter from './routes/urls.js';
 import analysesRouter from './routes/analyses.js';
 import settingsRouter from './routes/settings.js';
+import tagsRouter from './routes/tags.js';
 import { initScheduler } from './services/scheduler.js';
 
 const app = new Hono();
@@ -22,6 +23,7 @@ app.onError((err, c) => {
 app.route('/api/urls', urlsRouter);
 app.route('/api/analyses', analysesRouter);
 app.route('/api/settings', settingsRouter);
+app.route('/api/tags', tagsRouter);
 
 const port = Number(process.env.PORT ?? 3001);
 

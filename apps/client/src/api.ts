@@ -8,6 +8,7 @@ export interface Url {
   isActive: boolean;
   createdAt: string | null;
   lastAnalyzed: string | null;
+  tags: string[];
   latestMobile: Analysis | null;
   latestDesktop: Analysis | null;
 }
@@ -27,8 +28,25 @@ export interface Analysis {
   error: string | null;
 }
 
+export interface Tag {
+  id: number;
+  name: string;
+}
+
 export interface Settings {
   pagespeed_api_key?: string;
+}
+
+export interface BulkImportItem {
+  url: string;
+  name?: string;
+  scheduleInterval: string;
+  tags?: string[];
+}
+
+export interface BulkImportResult {
+  created: Url[];
+  errors: { url: string; message: string }[];
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,7 +71,7 @@ export function useUrls() {
 export function useAddUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { url: string; name?: string; scheduleInterval: string }) =>
+    mutationFn: (data: { url: string; name?: string; scheduleInterval: string; tags?: string[] }) =>
       apiFetch<Url>('/urls', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
@@ -62,7 +80,7 @@ export function useAddUrl() {
 export function useUpdateUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; name?: string; scheduleInterval?: string; isActive?: boolean }) =>
+    mutationFn: ({ id, ...data }: { id: number; name?: string; scheduleInterval?: string; isActive?: boolean; tags?: string[] }) =>
       apiFetch<Url>(`/urls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
@@ -90,6 +108,15 @@ export function useAnalyze() {
   });
 }
 
+export function useBulkImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: BulkImportItem[]) =>
+      apiFetch<BulkImportResult>('/urls/bulk', { method: 'POST', body: JSON.stringify({ urls: items }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
+  });
+}
+
 // ─── Analyses ────────────────────────────────────────────────────────────────
 
 export function useAnalyses(urlId: number, strategy?: 'mobile' | 'desktop') {
@@ -100,6 +127,12 @@ export function useAnalyses(urlId: number, strategy?: 'mobile' | 'desktop') {
     queryFn: () => apiFetch(`/analyses/${urlId}?${params}`),
     enabled: !!urlId,
   });
+}
+
+// ─── Tags ─────────────────────────────────────────────────────────────────────
+
+export function useTags() {
+  return useQuery<Tag[]>({ queryKey: ['tags'], queryFn: () => apiFetch('/tags') });
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────

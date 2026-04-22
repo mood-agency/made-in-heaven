@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, primaryKey } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 export const urls = sqliteTable('urls', {
@@ -33,12 +33,34 @@ export const settings = sqliteTable('settings', {
   value: text('value'),
 });
 
+export const tags = sqliteTable('tags', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+});
+
+export const urlTags = sqliteTable('url_tags', {
+  urlId: integer('url_id').notNull().references(() => urls.id, { onDelete: 'cascade' }),
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (t) => [
+  primaryKey({ columns: [t.urlId, t.tagId] }),
+]);
+
 export const urlsRelations = relations(urls, ({ many }) => ({
   analyses: many(analyses),
+  urlTags: many(urlTags),
 }));
 
 export const analysesRelations = relations(analyses, ({ one }) => ({
   url: one(urls, { fields: [analyses.urlId], references: [urls.id] }),
+}));
+
+export const tagsRelations = relations(tags, ({ many }) => ({
+  urlTags: many(urlTags),
+}));
+
+export const urlTagsRelations = relations(urlTags, ({ one }) => ({
+  url: one(urls, { fields: [urlTags.urlId], references: [urls.id] }),
+  tag: one(tags, { fields: [urlTags.tagId], references: [tags.id] }),
 }));
 
 export type Url = typeof urls.$inferSelect;
@@ -46,3 +68,5 @@ export type NewUrl = typeof urls.$inferInsert;
 export type Analysis = typeof analyses.$inferSelect;
 export type NewAnalysis = typeof analyses.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;
