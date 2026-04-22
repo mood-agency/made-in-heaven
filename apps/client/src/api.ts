@@ -1,4 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { rpc } from '@/lib/rpc';
+
+export type ScheduleInterval = 'manual' | 'hourly' | 'every6h' | 'every12h' | 'daily' | 'weekly';
 
 export interface Url {
   id: number;
@@ -40,7 +43,7 @@ export interface Settings {
 export interface BulkImportItem {
   url: string;
   name?: string;
-  scheduleInterval: string;
+  scheduleInterval: ScheduleInterval;
   tags?: string[];
 }
 
@@ -49,30 +52,33 @@ export interface BulkImportResult {
   errors: { url: string; message: string }[];
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
+async function throwIfError(res: Response) {
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string };
     throw new Error(err.message ?? 'Request failed');
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  return res;
 }
 
 // ─── URLs ───────────────────────────────────────────────────────────────────
 
 export function useUrls() {
-  return useQuery<Url[]>({ queryKey: ['urls'], queryFn: () => apiFetch('/urls') });
+  return useQuery<Url[]>({
+    queryKey: ['urls'],
+    queryFn: async () => {
+      const res = await throwIfError(await rpc.api.urls.$get());
+      return res.json() as Promise<Url[]>;
+    },
+  });
 }
 
 export function useAddUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { url: string; name?: string; scheduleInterval: string; tags?: string[] }) =>
-      apiFetch<Url>('/urls', { method: 'POST', body: JSON.stringify(data) }),
+    mutationFn: async (data: { url: string; name?: string; scheduleInterval: ScheduleInterval; tags?: string[] }) => {
+      const res = await throwIfError(await rpc.api.urls.$post({ json: data }));
+      return res.json() as Promise<Url>;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
 }
@@ -80,8 +86,10 @@ export function useAddUrl() {
 export function useUpdateUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; name?: string; scheduleInterval?: string; isActive?: boolean; tags?: string[] }) =>
-      apiFetch<Url>(`/urls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    mutationFn: async ({ id, ...data }: { id: number; name?: string; scheduleInterval?: ScheduleInterval; isActive?: boolean; tags?: string[] }) => {
+      const res = await throwIfError(await rpc.api.urls[':id'].$put({ param: { id: String(id) }, json: data }));
+      return res.json() as Promise<Url>;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
 }
@@ -89,7 +97,9 @@ export function useUpdateUrl() {
 export function useDeleteUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => apiFetch<void>(`/urls/${id}`, { method: 'DELETE' }),
+    mutationFn: async (id: number) => {
+      await throwIfError(await rpc.api.urls[':id'].$delete({ param: { id: String(id) } }));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
 }
@@ -97,8 +107,10 @@ export function useDeleteUrl() {
 export function useAnalyze() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) =>
-      apiFetch<{ message: string }>(`/urls/${id}/analyze`, { method: 'POST' }),
+    mutationFn: async (id: number) => {
+      const res = await throwIfError(await rpc.api.urls[':id'].analyze.$post({ param: { id: String(id) } }));
+      return res.json() as Promise<{ message: string }>;
+    },
     onSuccess: (_data, id) => {
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ['urls'] });
@@ -111,8 +123,10 @@ export function useAnalyze() {
 export function useBulkImport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (items: BulkImportItem[]) =>
-      apiFetch<BulkImportResult>('/urls/bulk', { method: 'POST', body: JSON.stringify({ urls: items }) }),
+    mutationFn: async (items: BulkImportItem[]) => {
+      const res = await throwIfError(await rpc.api.urls.bulk.$post({ json: { urls: items } }));
+      return res.json() as Promise<BulkImportResult>;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
 }
@@ -120,11 +134,16 @@ export function useBulkImport() {
 // ─── Analyses ────────────────────────────────────────────────────────────────
 
 export function useAnalyses(urlId: number, strategy?: 'mobile' | 'desktop') {
-  const params = new URLSearchParams({ limit: '60' });
-  if (strategy) params.set('strategy', strategy);
   return useQuery<Analysis[]>({
     queryKey: ['analyses', urlId, strategy],
-    queryFn: () => apiFetch(`/analyses/${urlId}?${params}`),
+    queryFn: async () => {
+      const query: Record<string, string> = { limit: '60' };
+      if (strategy) query.strategy = strategy;
+      const res = await throwIfError(
+        await rpc.api.analyses[':urlId'].$get({ param: { urlId: String(urlId) }, query }),
+      );
+      return res.json() as Promise<Analysis[]>;
+    },
     enabled: !!urlId,
   });
 }
@@ -132,20 +151,34 @@ export function useAnalyses(urlId: number, strategy?: 'mobile' | 'desktop') {
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
 export function useTags() {
-  return useQuery<Tag[]>({ queryKey: ['tags'], queryFn: () => apiFetch('/tags') });
+  return useQuery<Tag[]>({
+    queryKey: ['tags'],
+    queryFn: async () => {
+      const res = await throwIfError(await rpc.api.tags.$get());
+      return res.json() as Promise<Tag[]>;
+    },
+  });
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 export function useSettings() {
-  return useQuery<Settings>({ queryKey: ['settings'], queryFn: () => apiFetch('/settings') });
+  return useQuery<Settings>({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const res = await throwIfError(await rpc.api.settings.$get());
+      return res.json() as Promise<Settings>;
+    },
+  });
 }
 
 export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { pagespeed_api_key: string }) =>
-      apiFetch<{ ok: boolean }>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    mutationFn: async (data: { pagespeed_api_key: string }) => {
+      const res = await throwIfError(await rpc.api.settings.$put({ json: data }));
+      return res.json() as Promise<{ ok: boolean }>;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 }

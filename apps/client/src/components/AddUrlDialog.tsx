@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { useAddUrl, useTags } from '@/api';
+import { useAddUrl, useTags, type ScheduleInterval } from '@/api';
 import { Plus, X } from 'lucide-react';
 
 const SCHEDULES = [
@@ -33,7 +33,7 @@ export default function AddUrlDialog() {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
-  const [scheduleInterval, setScheduleInterval] = useState('manual');
+  const [scheduleInterval, setScheduleInterval] = useState<ScheduleInterval>('manual');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -116,7 +116,7 @@ export default function AddUrlDialog() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Analysis schedule</label>
-            <Select value={scheduleInterval} onValueChange={setScheduleInterval}>
+            <Select value={scheduleInterval} onValueChange={(v) => setScheduleInterval(v as ScheduleInterval)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

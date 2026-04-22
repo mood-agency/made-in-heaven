@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useUrls, useAnalyses, useAnalyze, useUpdateUrl } from '@/api';
+import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, type ScheduleInterval } from '@/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -85,7 +85,7 @@ export default function UrlDetail() {
 
   async function handleScheduleChange(value: string) {
     try {
-      await updateUrl.mutateAsync({ id: urlId, scheduleInterval: value });
+      await updateUrl.mutateAsync({ id: urlId, scheduleInterval: value as ScheduleInterval });
       toast.success('Schedule updated');
     } catch (err) {
       toast.error(String(err));

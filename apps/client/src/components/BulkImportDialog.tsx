@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useBulkImport } from '@/api';
+import { useBulkImport, type ScheduleInterval } from '@/api';
 import { Upload, Plus, Trash2, FileUp } from 'lucide-react';
 
 const SCHEDULES = [
@@ -40,7 +40,7 @@ interface Row {
   id: number;
   url: string;
   name: string;
-  scheduleInterval: string;
+  scheduleInterval: ScheduleInterval;
   tags: string;
 }
 
@@ -93,7 +93,7 @@ function parseCSV(text: string): Row[] {
         id: ++rowCounter,
         url,
         name,
-        scheduleInterval: validSchedules.includes(schedule) ? schedule : 'manual',
+        scheduleInterval: (validSchedules.includes(schedule) ? schedule : 'manual') as ScheduleInterval,
         tags,
       };
     })
@@ -242,7 +242,7 @@ export default function BulkImportDialog() {
                       <TableCell className="py-1.5">
                         <Select
                           value={row.scheduleInterval}
-                          onValueChange={(v) => updateRow(row.id, 'scheduleInterval', v)}
+                          onValueChange={(v) => updateRow(row.id, 'scheduleInterval', v as ScheduleInterval)}
                         >
                           <SelectTrigger className="h-8 text-sm">
                             <SelectValue />
