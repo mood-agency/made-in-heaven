@@ -15,6 +15,13 @@
       "when": 1776888340929,
       "tag": "0001_past_harrier",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776891089390,
+      "tag": "0002_flimsy_corsair",
+      "breakpoints": true
     }
   ]
 }

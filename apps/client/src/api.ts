@@ -9,6 +9,7 @@ export interface Url {
   name: string | null;
   scheduleInterval: string;
   isActive: boolean;
+  displayOrder: number | null;
   createdAt: string | null;
   lastAnalyzed: string | null;
   tags: string[];
@@ -86,7 +87,7 @@ export function useAddUrl() {
 export function useUpdateUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: number; name?: string; scheduleInterval?: ScheduleInterval; isActive?: boolean; tags?: string[] }) => {
+    mutationFn: async ({ id, ...data }: { id: number; name?: string; scheduleInterval?: ScheduleInterval; isActive?: boolean; displayOrder?: number | null; tags?: string[] }) => {
       const res = await throwIfError(await rpc.api.urls[':id'].$put({ param: { id: String(id) }, json: data }));
       return res.json() as Promise<Url>;
     },

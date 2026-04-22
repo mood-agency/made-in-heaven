@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useUrls, useAnalyze, useDeleteUrl } from '@/api';
+import { useUrls, useAnalyze, useDeleteUrl, useUpdateUrl, type Url } from '@/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import ScoreCircle from '@/components/ScoreCircle';
 import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
-import { RefreshCw, Trash2, ExternalLink, X } from 'lucide-react';
+import UrlTable from '@/components/UrlTable';
+import { arrayMove } from '@dnd-kit/sortable';
+import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2 } from 'lucide-react';
+
+type ViewMode = 'grid' | 'table';
+type SortMode = 'manual' | 'alpha' | 'mobile' | 'desktop';
 
 function timeAgo(date: string | null) {
   if (!date) return 'Never';
@@ -26,7 +31,26 @@ export default function Dashboard() {
   const { data: urls, isLoading } = useUrls();
   const analyze = useAnalyze();
   const deleteUrl = useDeleteUrl();
+  const updateUrl = useUpdateUrl();
+
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (localStorage.getItem('psi-view') ?? 'grid') as ViewMode,
+  );
+  const [sortMode, setSortMode] = useState<SortMode>(
+    () => (localStorage.getItem('psi-sort') ?? 'manual') as SortMode,
+  );
+  const [localUrls, setLocalUrls] = useState<Url[]>([]);
+
+  function changeView(mode: ViewMode) {
+    setViewMode(mode);
+    localStorage.setItem('psi-view', mode);
+  }
+
+  function changeSort(mode: SortMode) {
+    setSortMode(mode);
+    localStorage.setItem('psi-sort', mode);
+  }
 
   async function handleAnalyze(id: number) {
     try {
@@ -47,20 +71,106 @@ export default function Dashboard() {
     }
   }
 
-  // Collect all unique tags from all URLs
+  function handleReorder(oldIndex: number, newIndex: number) {
+    const newOrder = arrayMove(localUrls, oldIndex, newIndex);
+    setLocalUrls(newOrder);
+    newOrder.forEach((u, i) => {
+      if (u.displayOrder !== i + 1) {
+        updateUrl.mutate({ id: u.id, displayOrder: i + 1 });
+      }
+    });
+  }
+
   const allTags = Array.from(
     new Set((urls ?? []).flatMap((u) => u.tags ?? []))
   ).sort();
 
   const filtered = activeTag
     ? (urls ?? []).filter((u) => u.tags?.includes(activeTag))
-    : urls;
+    : (urls ?? []);
+
+  // Server-side manual order (source of truth for localUrls sync)
+  const filteredManual = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      if (a.displayOrder == null && b.displayOrder == null) return 0;
+      if (a.displayOrder == null) return 1;
+      if (b.displayOrder == null) return -1;
+      return a.displayOrder - b.displayOrder;
+    });
+  }, [filtered]);
+
+  // Sync localUrls from server when data changes (after mutations, filter changes, etc.)
+  useEffect(() => {
+    setLocalUrls(filteredManual);
+  }, [filteredManual]);
+
+  const sorted = useMemo(() => {
+    if (sortMode === 'manual') return localUrls;
+    return [...filtered].sort((a, b) => {
+      switch (sortMode) {
+        case 'alpha': {
+          const nameA = a.name ?? new URL(a.url).hostname;
+          const nameB = b.name ?? new URL(b.url).hostname;
+          return nameA.localeCompare(nameB);
+        }
+        case 'mobile': {
+          const sa = a.latestMobile?.performanceScore ?? -1;
+          const sb = b.latestMobile?.performanceScore ?? -1;
+          return sb - sa;
+        }
+        case 'desktop': {
+          const sa = a.latestDesktop?.performanceScore ?? -1;
+          const sb = b.latestDesktop?.performanceScore ?? -1;
+          return sb - sa;
+        }
+      }
+    });
+  }, [filtered, sortMode, localUrls]);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">PageSpeed Monitor</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Sort controls */}
+          <div className="flex rounded-md border overflow-hidden text-xs">
+            {(['manual', 'alpha', 'mobile', 'desktop'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => changeSort(mode)}
+                className={`px-3 py-1.5 transition-colors ${
+                  sortMode === mode
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-accent text-muted-foreground'
+                }`}
+              >
+                {mode === 'manual' ? '#' : mode === 'alpha' ? 'A-Z' : mode === 'mobile' ? 'Mobile' : 'Desktop'}
+              </button>
+            ))}
+          </div>
+
+          {/* View toggle */}
+          <div className="flex rounded-md border overflow-hidden">
+            <button
+              onClick={() => changeView('grid')}
+              title="Vista cuadrícula"
+              className={`p-1.5 transition-colors ${
+                viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent text-muted-foreground'
+              }`}
+            >
+              <LayoutGrid className="size-4" />
+            </button>
+            <button
+              onClick={() => changeView('table')}
+              title="Vista tabla"
+              className={`p-1.5 transition-colors ${
+                viewMode === 'table' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent text-muted-foreground'
+              }`}
+            >
+              <Table2 className="size-4" />
+            </button>
+          </div>
+
           <BulkImportDialog />
           <AddUrlDialog />
         </div>
@@ -110,7 +220,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {!isLoading && filtered?.length === 0 && (urls?.length ?? 0) > 0 && (
+      {!isLoading && sorted.length === 0 && (urls?.length ?? 0) > 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
           <p>No URLs match the selected tag.</p>
           <button onClick={() => setActiveTag(null)} className="text-sm underline">
@@ -119,9 +229,22 @@ export default function Dashboard() {
         </div>
       )}
 
-      {filtered && filtered.length > 0 && (
+      {sorted.length > 0 && viewMode === 'table' && (
+        <UrlTable
+          urls={sorted}
+          sortMode={sortMode}
+          activeTag={activeTag}
+          onTagClick={(tag) => setActiveTag(activeTag === tag ? null : tag)}
+          onReorder={handleReorder}
+          onAnalyze={handleAnalyze}
+          onDelete={handleDelete}
+          isAnalyzePending={analyze.isPending}
+        />
+      )}
+
+      {sorted.length > 0 && viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((u) => (
+          {sorted.map((u) => (
             <Card key={u.id} className="flex flex-col">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
@@ -143,7 +266,6 @@ export default function Dashboard() {
                     {u.scheduleInterval === 'manual' ? 'Manual' : u.scheduleInterval}
                   </Badge>
                 </div>
-                {/* Tags */}
                 {u.tags && u.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 pt-1">
                     {u.tags.map((tag) => (

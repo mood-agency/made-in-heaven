@@ -1,0 +1,1 @@
+ALTER TABLE `urls` ADD `display_order` integer;

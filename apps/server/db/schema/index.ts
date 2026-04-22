@@ -7,6 +7,7 @@ export const urls = sqliteTable('urls', {
   name: text('name'),
   scheduleInterval: text('schedule_interval').notNull().default('manual'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  displayOrder: integer('display_order'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   lastAnalyzed: integer('last_analyzed', { mode: 'timestamp' }),
 });

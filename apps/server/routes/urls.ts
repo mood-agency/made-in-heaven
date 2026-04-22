@@ -20,6 +20,7 @@ const updateSchema = z.object({
   name: z.string().optional(),
   scheduleInterval: scheduleEnum.optional(),
   isActive: z.boolean().optional(),
+  displayOrder: z.number().int().nullable().optional(),
   tags: z.array(z.string().min(1)).optional(),
 });
 
