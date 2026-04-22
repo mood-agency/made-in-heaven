@@ -32,3 +32,6 @@ pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Playwright MCP
+.playwright-mcp/
