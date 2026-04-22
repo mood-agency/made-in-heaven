@@ -12,6 +12,7 @@ apps/server/data/
 .env
 .env.local
 .env*.local
+.dev.vars
 
 # Editor
 .vscode/

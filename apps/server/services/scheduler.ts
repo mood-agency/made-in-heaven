@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { db } from '../db/db.js';
+import type { Db } from '../types.js';
 import { urls } from '../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import { analyzeUrl } from './pagespeed.js';
@@ -14,18 +14,18 @@ const CRON_MAP: Record<string, string> = {
 
 const jobs = new Map<number, cron.ScheduledTask>();
 
-function scheduleJob(urlId: number, urlStr: string, interval: string) {
+function scheduleJob(db: Db, apiKey: string | undefined, urlId: number, urlStr: string, interval: string) {
   const expr = CRON_MAP[interval];
   if (!expr) return;
   const task = cron.schedule(expr, () => {
-    analyzeUrl(urlId, urlStr).catch(console.error);
+    analyzeUrl(db, urlId, urlStr, apiKey).catch(console.error);
   });
   jobs.set(urlId, task);
 }
 
-export function reschedule(urlId: number, urlStr: string, newInterval: string) {
+export function reschedule(db: Db, apiKey: string | undefined, urlId: number, urlStr: string, newInterval: string) {
   removeJob(urlId);
-  if (newInterval !== 'manual') scheduleJob(urlId, urlStr, newInterval);
+  if (newInterval !== 'manual') scheduleJob(db, apiKey, urlId, urlStr, newInterval);
 }
 
 export function removeJob(urlId: number) {
@@ -36,7 +36,7 @@ export function removeJob(urlId: number) {
   }
 }
 
-export async function initScheduler() {
+export async function initScheduler(db: Db, apiKey?: string) {
   const activeUrls = await db
     .select()
     .from(urls)
@@ -44,7 +44,7 @@ export async function initScheduler() {
 
   const scheduled = activeUrls.filter((u) => u.scheduleInterval !== 'manual');
   for (const u of scheduled) {
-    scheduleJob(u.id, u.url, u.scheduleInterval);
+    scheduleJob(db, apiKey, u.id, u.url, u.scheduleInterval);
   }
   console.log(`[scheduler] ${scheduled.length} job(s) initialized`);
 }

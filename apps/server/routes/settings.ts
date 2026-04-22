@@ -1,20 +1,22 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db } from '../db/db.js';
+import type { Variables } from '../types.js';
 import { settings } from '../db/schema/index.js';
 
 const updateSchema = z.object({
   pagespeed_api_key: z.string(),
 });
 
-const router = new Hono()
+const router = new Hono<{ Variables: Variables }>()
   .get('/', async (c) => {
+    const db = c.var.db;
     const rows = await db.select().from(settings);
     const result = Object.fromEntries(rows.map((r) => [r.key, r.value]));
     return c.json(result);
   })
   .put('/', zValidator('json', updateSchema), async (c) => {
+    const db = c.var.db;
     const data = c.req.valid('json');
     await db
       .insert(settings)

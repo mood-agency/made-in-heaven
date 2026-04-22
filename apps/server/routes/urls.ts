@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db } from '../db/db.js';
+import type { Variables, Db } from '../types.js';
 import { urls, analyses, tags, urlTags } from '../db/schema/index.js';
 import { eq, desc, inArray } from 'drizzle-orm';
 import { analyzeUrl } from '../services/pagespeed.js';
-import { reschedule, removeJob } from '../services/scheduler.js';
 
 const scheduleEnum = z.enum(['manual', 'hourly', 'every6h', 'every12h', 'daily', 'weekly']);
 
@@ -33,7 +32,7 @@ const bulkSchema = z.object({
   })).min(1),
 });
 
-async function upsertTags(tagNames: string[]): Promise<number[]> {
+async function upsertTags(db: Db, tagNames: string[]): Promise<number[]> {
   if (tagNames.length === 0) return [];
   const ids: number[] = [];
   for (const name of tagNames) {
@@ -46,9 +45,9 @@ async function upsertTags(tagNames: string[]): Promise<number[]> {
   return ids;
 }
 
-async function setUrlTags(urlId: number, tagNames: string[]) {
+async function setUrlTags(db: Db, urlId: number, tagNames: string[]) {
   await db.delete(urlTags).where(eq(urlTags.urlId, urlId));
-  const tagIds = await upsertTags(tagNames);
+  const tagIds = await upsertTags(db, tagNames);
   if (tagIds.length > 0) {
     await db.insert(urlTags).values(tagIds.map((tagId) => ({ urlId, tagId })));
   }
@@ -62,7 +61,7 @@ function extractDomainTag(urlStr: string): string {
   }
 }
 
-async function getTagsForUrls(urlIds: number[]): Promise<Record<number, string[]>> {
+async function getTagsForUrls(db: Db, urlIds: number[]): Promise<Record<number, string[]>> {
   if (urlIds.length === 0) return {};
   const rows = await db
     .select({ urlId: urlTags.urlId, name: tags.name })
@@ -78,11 +77,12 @@ async function getTagsForUrls(urlIds: number[]): Promise<Record<number, string[]
   return map;
 }
 
-const router = new Hono()
+const router = new Hono<{ Variables: Variables }>()
   .get('/', async (c) => {
+    const db = c.var.db;
     const allUrls = await db.select().from(urls);
     const urlIds = allUrls.map((u) => u.id);
-    const tagsMap = await getTagsForUrls(urlIds);
+    const tagsMap = await getTagsForUrls(db, urlIds);
 
     const enriched = await Promise.all(
       allUrls.map(async (u) => {
@@ -102,17 +102,19 @@ const router = new Hono()
     return c.json(enriched);
   })
   .post('/', zValidator('json', createSchema), async (c) => {
+    const db = c.var.db;
     const { tags: tagNames, ...data } = c.req.valid('json');
     const [result] = await db.insert(urls).values(data).returning();
     const domain = extractDomainTag(data.url);
     const allTags = Array.from(new Set([...(tagNames ?? []), ...(domain ? [domain] : [])]));
-    await setUrlTags(result.id, allTags);
+    await setUrlTags(db, result.id, allTags);
     if (data.scheduleInterval !== 'manual') {
-      reschedule(result.id, result.url, data.scheduleInterval);
+      c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
     }
     return c.json({ ...result, tags: allTags }, 201);
   })
   .post('/bulk', zValidator('json', bulkSchema), async (c) => {
+    const db = c.var.db;
     const { urls: items } = c.req.valid('json');
     const created: unknown[] = [];
     const errors: { url: string; message: string }[] = [];
@@ -123,9 +125,9 @@ const router = new Hono()
         const [result] = await db.insert(urls).values(data).returning();
         const domain = extractDomainTag(item.url);
         const allTags = Array.from(new Set([...(tagNames ?? []), ...(domain ? [domain] : [])]));
-        await setUrlTags(result.id, allTags);
+        await setUrlTags(db, result.id, allTags);
         if (data.scheduleInterval !== 'manual') {
-          reschedule(result.id, result.url, data.scheduleInterval);
+          c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
         }
         created.push({ ...result, tags: allTags });
       } catch (err) {
@@ -136,6 +138,7 @@ const router = new Hono()
     return c.json({ created, errors }, 201);
   })
   .put('/:id', zValidator('json', updateSchema), async (c) => {
+    const db = c.var.db;
     const id = Number(c.req.param('id'));
     const { tags: tagNames, ...data } = c.req.valid('json');
 
@@ -151,28 +154,31 @@ const router = new Hono()
     }
 
     if (tagNames !== undefined) {
-      await setUrlTags(id, tagNames);
+      await setUrlTags(db, id, tagNames);
     }
 
     if (data.scheduleInterval !== undefined) {
-      reschedule(id, updated.url, updated.scheduleInterval);
+      c.var.reschedule?.(id, updated.url, updated.scheduleInterval);
     }
 
-    const currentTags = tagNames ?? (await getTagsForUrls([id]))[id] ?? [];
+    const currentTags = tagNames ?? (await getTagsForUrls(db, [id]))[id] ?? [];
     return c.json({ ...updated, tags: currentTags });
   })
   .delete('/:id', async (c) => {
+    const db = c.var.db;
     const id = Number(c.req.param('id'));
-    removeJob(id);
+    c.var.removeJob?.(id);
     await db.delete(urls).where(eq(urls.id, id));
     return c.body(null, 204);
   })
   .post('/:id/analyze', async (c) => {
+    const db = c.var.db;
     const id = Number(c.req.param('id'));
     const [url] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
     if (!url) return c.json({ message: 'Not found' }, 404);
 
-    analyzeUrl(id, url.url).catch(console.error);
+    const promise = analyzeUrl(db, id, url.url, c.var.apiKey);
+    c.executionCtx?.waitUntil(promise);
     return c.json({ message: 'Analysis started' });
   });
 

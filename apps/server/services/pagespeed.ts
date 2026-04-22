@@ -1,4 +1,4 @@
-import { db } from '../db/db.js';
+import type { Db } from '../types.js';
 import { analyses, urls, settings } from '../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 
@@ -25,7 +25,7 @@ function extractMetrics(lr: LighthouseResult) {
   };
 }
 
-async function getApiKey(): Promise<string | null> {
+async function getApiKey(db: Db, envKey: string | undefined): Promise<string | null> {
   const [row] = await db
     .select()
     .from(settings)
@@ -33,7 +33,7 @@ async function getApiKey(): Promise<string | null> {
     .limit(1);
   const dbKey = row?.value?.trim();
   const validKey = dbKey?.startsWith('AIza') ? dbKey : null;
-  return validKey || process.env.PAGESPEED_API_KEY || null;
+  return validKey || envKey || null;
 }
 
 async function runStrategy(url: string, strategy: 'mobile' | 'desktop', apiKey: string | null) {
@@ -49,8 +49,13 @@ async function runStrategy(url: string, strategy: 'mobile' | 'desktop', apiKey: 
   return extractMetrics(data.lighthouseResult);
 }
 
-export async function analyzeUrl(urlId: number, urlStr: string): Promise<void> {
-  const apiKey = await getApiKey();
+export async function analyzeUrl(
+  db: Db,
+  urlId: number,
+  urlStr: string,
+  envApiKey?: string,
+): Promise<void> {
+  const apiKey = await getApiKey(db, envApiKey);
 
   await Promise.all(
     (['mobile', 'desktop'] as const).map(async (strategy) => {

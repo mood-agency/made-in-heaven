@@ -3,10 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch index.ts",
-    "build": "tsc",
+    "dev": "tsx watch index.node.ts",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:local": "wrangler d1 migrations apply psi-report --local",
+    "db:migrate:remote": "wrangler d1 migrations apply psi-report --remote",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
@@ -20,10 +24,12 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250422.0",
     "@types/node": "^22.15.3",
     "@types/node-cron": "^3.0.11",
     "drizzle-kit": "^0.30.4",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "wrangler": "^4.0.0"
   }
 }

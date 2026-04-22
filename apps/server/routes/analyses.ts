@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db } from '../db/db.js';
+import type { Variables } from '../types.js';
 import { analyses } from '../db/schema/index.js';
 import { eq, and, desc } from 'drizzle-orm';
 
@@ -10,8 +10,9 @@ const querySchema = z.object({
   limit: z.string().optional(),
 });
 
-const router = new Hono()
+const router = new Hono<{ Variables: Variables }>()
   .get('/:urlId', zValidator('query', querySchema), async (c) => {
+    const db = c.var.db;
     const urlId = Number(c.req.param('urlId'));
     const { strategy, limit: limitStr } = c.req.valid('query');
     const limit = Math.min(Number(limitStr ?? 50), 200);

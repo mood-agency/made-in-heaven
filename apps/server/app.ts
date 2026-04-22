@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import type { Variables } from './types.js';
 import urlsRouter from './routes/urls.js';
 import analysesRouter from './routes/analyses.js';
 import settingsRouter from './routes/settings.js';
 import tagsRouter from './routes/tags.js';
 
-const app = new Hono();
+const app = new Hono<{ Variables: Variables }>();
 
 app.use('*', logger());
 app.use('*', cors());
