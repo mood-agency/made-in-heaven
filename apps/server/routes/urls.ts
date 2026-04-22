@@ -177,6 +177,12 @@ const router = new Hono<{ Variables: Variables }>()
     const [url] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
     if (!url) return c.json({ message: 'Not found' }, 404);
 
+    const enqueue = c.var.enqueueAnalysis;
+    if (enqueue) {
+      await enqueue(id, url.url);
+      return c.json({ message: 'Analysis queued' });
+    }
+
     const promise = analyzeUrl(db, id, url.url, c.var.apiKey);
     c.executionCtx?.waitUntil(promise);
     return c.json({ message: 'Analysis started' });

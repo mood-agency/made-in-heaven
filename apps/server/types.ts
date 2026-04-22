@@ -10,4 +10,5 @@ export type Variables = {
   apiKey: string | undefined;
   reschedule?: (urlId: number, urlStr: string, interval: string) => void;
   removeJob?: (urlId: number) => void;
+  enqueueAnalysis?: (urlId: number, urlStr: string) => Promise<void>;
 };
