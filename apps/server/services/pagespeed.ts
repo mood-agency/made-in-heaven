@@ -57,16 +57,14 @@ export async function analyzeUrl(
 ): Promise<void> {
   const apiKey = await getApiKey(db, envApiKey);
 
-  await Promise.all(
-    (['mobile', 'desktop'] as const).map(async (strategy) => {
-      try {
-        const metrics = await runStrategy(urlStr, strategy, apiKey);
-        await db.insert(analyses).values({ urlId, strategy, ...metrics });
-      } catch (err) {
-        await db.insert(analyses).values({ urlId, strategy, error: String(err) });
-      }
-    }),
-  );
+  for (const strategy of ['mobile', 'desktop'] as const) {
+    try {
+      const metrics = await runStrategy(urlStr, strategy, apiKey);
+      await db.insert(analyses).values({ urlId, strategy, ...metrics });
+    } catch (err) {
+      await db.insert(analyses).values({ urlId, strategy, error: String(err) });
+    }
+  }
 
   await db.update(urls).set({ lastAnalyzed: new Date() }).where(eq(urls.id, urlId));
 }
