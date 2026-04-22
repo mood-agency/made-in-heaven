@@ -1,7 +1,9 @@
+import { useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, type ScheduleInterval } from '@/api';
+import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, useTags, type ScheduleInterval } from '@/api';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -13,7 +15,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import ScoreCircle from '@/components/ScoreCircle';
 import { MetricChart, METRICS } from '@/components/MetricsChart';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Pencil, X } from 'lucide-react';
 import type { Analysis } from '@/api';
 
 const SCHEDULES = [
@@ -73,6 +75,59 @@ export default function UrlDetail() {
   const desktopQ = useAnalyses(urlId, 'desktop');
   const analyze = useAnalyze();
   const updateUrl = useUpdateUrl();
+  const { data: existingTags = [] } = useTags();
+
+  const [editingTags, setEditingTags] = useState(false);
+  const [localTags, setLocalTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+
+  const tagSuggestions = existingTags
+    .map((t) => t.name)
+    .filter((n) => n.includes(tagInput.toLowerCase()) && !localTags.includes(n));
+
+  function startEditingTags() {
+    setLocalTags(urlData?.tags ?? []);
+    setTagInput('');
+    setEditingTags(true);
+  }
+
+  function addLocalTag(tag: string) {
+    const normalized = tag.trim().toLowerCase();
+    if (normalized && !localTags.includes(normalized)) {
+      setLocalTags((prev) => [...prev, normalized]);
+    }
+    setTagInput('');
+    setShowSuggestions(false);
+  }
+
+  function removeLocalTag(tag: string) {
+    setLocalTags((prev) => prev.filter((t) => t !== tag));
+  }
+
+  function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (tagInput.trim()) addLocalTag(tagInput);
+    } else if (e.key === 'Backspace' && !tagInput && localTags.length > 0) {
+      setLocalTags((prev) => prev.slice(0, -1));
+    }
+  }
+
+  async function handleSaveTags() {
+    const pendingTag = tagInput.trim().toLowerCase();
+    const finalTags = pendingTag && !localTags.includes(pendingTag)
+      ? [...localTags, pendingTag]
+      : localTags;
+    try {
+      await updateUrl.mutateAsync({ id: urlId, tags: finalTags });
+      toast.success('Tags updated');
+      setEditingTags(false);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
 
   async function handleAnalyze() {
     try {
@@ -118,6 +173,76 @@ export default function UrlDetail() {
           <h1 className="text-xl font-semibold truncate">{urlData.name ?? urlData.url}</h1>
           <p className="text-xs text-muted-foreground truncate">{urlData.url}</p>
         </div>
+        {/* Tags */}
+        {!editingTags ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(urlData.tags ?? []).map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+            ))}
+            <button
+              onClick={startEditingTags}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="size-3" />
+              {urlData.tags?.length ? 'Edit tags' : 'Add tags'}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 w-full">
+            <div className="relative">
+              <div
+                className="flex flex-wrap gap-1.5 min-h-9 px-3 py-1.5 rounded-md border border-input bg-background cursor-text"
+                onClick={() => tagInputRef.current?.focus()}
+              >
+                {localTags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="gap-1 text-xs">
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeLocalTag(tag); }}
+                      className="hover:text-destructive"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <input
+                  ref={tagInputRef}
+                  value={tagInput}
+                  onChange={(e) => { setTagInput(e.target.value); setShowSuggestions(true); }}
+                  onKeyDown={handleTagKeyDown}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  placeholder={localTags.length === 0 ? 'Add tags…' : ''}
+                  className="flex-1 min-w-20 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  autoFocus
+                />
+              </div>
+              {showSuggestions && tagSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-md border bg-popover shadow-md">
+                  {tagSuggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent"
+                      onMouseDown={() => addLocalTag(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSaveTags} disabled={updateUrl.isPending}>
+                {updateUrl.isPending ? 'Saving…' : 'Save tags'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setEditingTags(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
         <Select value={urlData.scheduleInterval} onValueChange={handleScheduleChange}>
           <SelectTrigger className="w-44">
             <SelectValue />

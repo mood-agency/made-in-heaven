@@ -69,8 +69,12 @@ export default function AddUrlDialog() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const pendingTag = tagInput.trim().toLowerCase();
+    const finalTags = pendingTag && !selectedTags.includes(pendingTag)
+      ? [...selectedTags, pendingTag]
+      : selectedTags;
     try {
-      await addUrl.mutateAsync({ url, name: name || undefined, scheduleInterval, tags: selectedTags });
+      await addUrl.mutateAsync({ url, name: name || undefined, scheduleInterval, tags: finalTags });
       toast.success('URL added successfully');
       setOpen(false);
       setUrl('');

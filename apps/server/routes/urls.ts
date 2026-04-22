@@ -137,8 +137,17 @@ const router = new Hono()
   .put('/:id', zValidator('json', updateSchema), async (c) => {
     const id = Number(c.req.param('id'));
     const { tags: tagNames, ...data } = c.req.valid('json');
-    const [updated] = await db.update(urls).set(data).where(eq(urls.id, id)).returning();
-    if (!updated) return c.json({ message: 'Not found' }, 404);
+
+    let updated: typeof urls.$inferSelect;
+    if (Object.keys(data).length > 0) {
+      const [result] = await db.update(urls).set(data).where(eq(urls.id, id)).returning();
+      if (!result) return c.json({ message: 'Not found' }, 404);
+      updated = result;
+    } else {
+      const [result] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
+      if (!result) return c.json({ message: 'Not found' }, 404);
+      updated = result;
+    }
 
     if (tagNames !== undefined) {
       await setUrlTags(id, tagNames);
