@@ -1,0 +1,17 @@
+{
+  "name": "psi-report",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "db:generate": "turbo run db:generate",
+    "db:migrate": "turbo run db:migrate"
+  },
+  "devDependencies": {
+    "turbo": "latest"
+  },
+  "packageManager": "pnpm@10.9.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  }
+}
