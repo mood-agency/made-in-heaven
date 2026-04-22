@@ -10,6 +10,7 @@ import type { Variables } from './types.js';
 type Env = {
   DB: D1Database;
   PAGESPEED_API_KEY: string;
+  ASSETS: Fetcher;
 };
 
 const CRON_TO_INTERVAL: Record<string, string> = {
@@ -29,6 +30,9 @@ worker.use('*', async (c, next) => {
 });
 
 worker.route('/', app);
+
+// Serve the React SPA for all non-API routes
+worker.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default {
   fetch: worker.fetch,
