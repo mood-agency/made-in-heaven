@@ -70,6 +70,7 @@ export function useUrls() {
       const res = await throwIfError(await rpc.api.urls.$get());
       return res.json() as Promise<Url[]>;
     },
+    refetchInterval: 30 * 1000,
   });
 }
 
@@ -113,26 +114,29 @@ export function useAnalyze() {
       return res.json() as Promise<{ message: string }>;
     },
     onSuccess: (_data, id) => {
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ['urls'] });
-        qc.invalidateQueries({ queryKey: ['analyses', id] });
-      }, 8000);
+      // Poll every 5s for up to 90s waiting for the queue consumer to finish
+      const prevAnalyzed = (qc.getQueryData<Url[]>(['urls']) ?? [])
+        .find((u) => u.id === id)?.lastAnalyzed ?? null;
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        await qc.invalidateQueries({ queryKey: ['urls'] });
+        await qc.invalidateQueries({ queryKey: ['analyses', id] });
+        const updated = (qc.getQueryData<Url[]>(['urls']) ?? []).find((u) => u.id === id);
+        if (updated?.lastAnalyzed !== prevAnalyzed || ++attempts >= 18) {
+          clearInterval(poll);
+        }
+      }, 5000);
     },
   });
 }
 
 export function useAnalyzeAll() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const res = await throwIfError(await rpc.api.urls['analyze-all'].$post());
       return res.json() as Promise<{ queued?: number; started?: number }>;
     },
-    onSuccess: (data) => {
-      const count = data.queued ?? data.started ?? 0;
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['urls'] }), 15000);
-      return count;
-    },
+    // No manual invalidation needed — useUrls polls every 30s automatically
   });
 }
 

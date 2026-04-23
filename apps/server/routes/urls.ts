@@ -82,22 +82,32 @@ const router = new Hono<{ Variables: Variables }>()
     const db = c.var.db;
     const allUrls = await db.select().from(urls);
     const urlIds = allUrls.map((u) => u.id);
-    const tagsMap = await getTagsForUrls(db, urlIds);
 
-    const enriched = await Promise.all(
-      allUrls.map(async (u) => {
-        const latest = await db
-          .select()
-          .from(analyses)
-          .where(eq(analyses.urlId, u.id))
-          .orderBy(desc(analyses.analyzedAt))
-          .limit(2);
+    // 3 queries total instead of N+2: urls + tags + all analyses batched
+    const [tagsMap, allAnalyses] = await Promise.all([
+      getTagsForUrls(db, urlIds),
+      urlIds.length > 0
+        ? db.select().from(analyses)
+            .where(inArray(analyses.urlId, urlIds))
+            // id DESC as tiebreaker when two analyses share the same second-precision timestamp
+            .orderBy(desc(analyses.analyzedAt), desc(analyses.id))
+        : Promise.resolve([] as (typeof analyses.$inferSelect)[]),
+    ]);
 
-        const mobile = latest.find((a) => a.strategy === 'mobile') ?? null;
-        const desktop = latest.find((a) => a.strategy === 'desktop') ?? null;
-        return { ...u, latestMobile: mobile, latestDesktop: desktop, tags: tagsMap[u.id] ?? [] };
-      }),
-    );
+    // One pass to pick the latest mobile and desktop per URL
+    const mobileMap: Record<number, typeof allAnalyses[0]> = {};
+    const desktopMap: Record<number, typeof allAnalyses[0]> = {};
+    for (const a of allAnalyses) {
+      if (!mobileMap[a.urlId] && a.strategy === 'mobile') mobileMap[a.urlId] = a;
+      if (!desktopMap[a.urlId] && a.strategy === 'desktop') desktopMap[a.urlId] = a;
+    }
+
+    const enriched = allUrls.map((u) => ({
+      ...u,
+      latestMobile: mobileMap[u.id] ?? null,
+      latestDesktop: desktopMap[u.id] ?? null,
+      tags: tagsMap[u.id] ?? [],
+    }));
 
     return c.json(enriched);
   })
