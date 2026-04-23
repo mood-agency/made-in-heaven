@@ -15,6 +15,9 @@ apps/server/data/
 .env*.local
 .dev.vars
 
+# Wrangler config (contains private resource IDs)
+apps/server/wrangler.jsonc
+
 # Editor
 .vscode/
 .idea/

@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "made-in-heaven-server",
+  "main": "index.ts",
+  "compatibility_date": "2026-04-22",
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "made-in-heaven",
+      "database_id": "YOUR_D1_DATABASE_ID",
+      "migrations_dir": "./drizzle/migrations"
+    }
+  ],
+
+  "triggers": {
+    "crons": ["0 9 * * *"]
+  },
+
+  "assets": {
+    "directory": "../client/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  "queues": {
+    "producers": [
+      { "binding": "ANALYSIS_QUEUE", "queue": "mih-analysis" }
+    ],
+    "consumers": [
+      {
+        "queue": "mih-analysis",
+        "max_batch_size": 5,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "dead_letter_queue": "mih-analysis-dlq"
+      }
+    ]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
