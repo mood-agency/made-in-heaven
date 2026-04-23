@@ -30,7 +30,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-type SortMode = 'manual' | 'alpha' | 'mobile' | 'desktop';
+type SortMode = 'manual' | 'alpha' | 'url' | 'mobile' | 'desktop';
 
 function timeAgo(date: string | null) {
   if (!date) return 'Never';
