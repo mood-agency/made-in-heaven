@@ -15,16 +15,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import ScoreCircle from '@/components/ScoreCircle';
 import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
 import UrlTable from '@/components/UrlTable';
 import { arrayMove } from '@dnd-kit/sortable';
-import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download } from 'lucide-react';
+import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type ViewMode = 'grid' | 'table';
-type SortMode = 'manual' | 'alpha' | 'mobile' | 'desktop';
+type SortMode = 'manual' | 'alpha' | 'url' | 'mobile' | 'desktop';
 
 function timeAgo(date: string | null) {
   if (!date) return 'Never';
@@ -52,6 +53,11 @@ export default function Dashboard() {
   const [sortMode, setSortMode] = useState<SortMode>(
     () => (localStorage.getItem('mih-sort') ?? 'manual') as SortMode,
   );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pageSize, setPageSize] = useState<number>(
+    () => Number(localStorage.getItem('mih-page-size') ?? '20'),
+  );
+  const [currentPage, setCurrentPage] = useState(1);
   const [localUrls, setLocalUrls] = useState<Url[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -65,22 +71,17 @@ export default function Dashboard() {
     localStorage.setItem('mih-sort', mode);
   }
 
+  function changePageSize(size: number) {
+    setPageSize(size);
+    setCurrentPage(1);
+    localStorage.setItem('mih-page-size', String(size));
+  }
+
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAll() {
-    const visibleIds = sorted.map((u) => u.id);
-    const allSelected = visibleIds.every((id) => selectedIds.has(id));
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allSelected) visibleIds.forEach((id) => next.delete(id));
-      else visibleIds.forEach((id) => next.add(id));
       return next;
     });
   }
@@ -187,6 +188,8 @@ export default function Dashboard() {
           const nameB = b.name ?? new URL(b.url).hostname;
           return nameA.localeCompare(nameB);
         }
+        case 'url':
+          return a.url.localeCompare(b.url);
         case 'mobile': {
           const sa = a.latestMobile?.performanceScore ?? -1;
           const sb = b.latestMobile?.performanceScore ?? -1;
@@ -201,6 +204,32 @@ export default function Dashboard() {
     });
   }, [filtered, sortMode, localUrls]);
 
+  const searched = useMemo(() => {
+    if (!searchQuery.trim()) return sorted;
+    const q = searchQuery.toLowerCase();
+    return sorted.filter((u) => u.url.toLowerCase().includes(q));
+  }, [sorted, searchQuery]);
+
+  const totalPages = Math.ceil(searched.length / pageSize) || 1;
+
+  const paginated = useMemo(
+    () => searched.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [searched, currentPage, pageSize],
+  );
+
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, activeTag]);
+
+  const toggleSelectAll = () => {
+    const visibleIds = paginated.map((u) => u.id);
+    const allSelected = visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -208,7 +237,7 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Sort controls */}
           <div className="flex rounded-md border overflow-hidden text-xs">
-            {(['manual', 'alpha', 'mobile', 'desktop'] as const).map((mode) => (
+            {(['manual', 'alpha', 'url', 'mobile', 'desktop'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => changeSort(mode)}
@@ -218,7 +247,7 @@ export default function Dashboard() {
                     : 'hover:bg-accent text-muted-foreground'
                 }`}
               >
-                {mode === 'manual' ? '#' : mode === 'alpha' ? 'A-Z' : mode === 'mobile' ? 'Mobile' : 'Desktop'}
+                {mode === 'manual' ? '#' : mode === 'alpha' ? 'A-Z' : mode === 'url' ? 'URL' : mode === 'mobile' ? 'Mobile' : 'Desktop'}
               </button>
             ))}
           </div>
@@ -288,6 +317,25 @@ export default function Dashboard() {
           <BulkImportDialog />
           <AddUrlDialog />
         </div>
+      </div>
+
+      {/* URL search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by URL…"
+          className="pl-8 pr-8"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
 
       {/* Tag filter bar */}
@@ -368,18 +416,29 @@ export default function Dashboard() {
         </div>
       )}
 
-      {!isLoading && sorted.length === 0 && (urls?.length ?? 0) > 0 && (
+      {!isLoading && searched.length === 0 && (urls?.length ?? 0) > 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-          <p>No URLs match the selected tag.</p>
-          <button onClick={() => setActiveTag(null)} className="text-sm underline">
-            Clear filter
-          </button>
+          {searchQuery.trim() ? (
+            <>
+              <p>No URLs match your search.</p>
+              <button onClick={() => setSearchQuery('')} className="text-sm underline">
+                Clear search
+              </button>
+            </>
+          ) : (
+            <>
+              <p>No URLs match the selected tag.</p>
+              <button onClick={() => setActiveTag(null)} className="text-sm underline">
+                Clear filter
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {sorted.length > 0 && viewMode === 'table' && (
+      {searched.length > 0 && viewMode === 'table' && (
         <UrlTable
-          urls={sorted}
+          urls={paginated}
           sortMode={sortMode}
           activeTag={activeTag}
           onTagClick={(tag) => setActiveTag(activeTag === tag ? null : tag)}
@@ -393,9 +452,9 @@ export default function Dashboard() {
         />
       )}
 
-      {sorted.length > 0 && viewMode === 'grid' && (
+      {searched.length > 0 && viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {sorted.map((u) => (
+          {paginated.map((u) => (
             <div key={u.id} className="relative">
               <div className="absolute top-3 left-3 z-10">
                 <Checkbox
@@ -481,6 +540,53 @@ export default function Dashboard() {
               </Card>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {searched.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <span className="text-xs text-muted-foreground">
+            {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, searched.length)} of {searched.length}
+          </span>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {currentPage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+
+          <div className="flex rounded-md border overflow-hidden text-xs">
+            {([20, 50, 100] as const).map((size) => (
+              <button
+                key={size}
+                onClick={() => changePageSize(size)}
+                className={`px-3 py-1.5 transition-colors ${
+                  pageSize === size
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-accent text-muted-foreground'
+                }`}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
