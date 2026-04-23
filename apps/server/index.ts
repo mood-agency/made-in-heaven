@@ -17,11 +17,7 @@ type Env = {
 };
 
 const CRON_TO_INTERVAL: Record<string, string> = {
-  '0 * * * *':    'hourly',
-  '0 */6 * * *':  'every6h',
-  '0 */12 * * *': 'every12h',
-  '0 9 * * *':    'daily',
-  '0 9 * * 1':    'weekly',
+  '0 9 * * *': 'daily',
 };
 
 const worker = new Hono<{ Bindings: Env; Variables: Variables }>();

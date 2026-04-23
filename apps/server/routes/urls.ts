@@ -6,7 +6,7 @@ import { urls, analyses, tags, urlTags } from '../db/schema/index.js';
 import { eq, desc, inArray } from 'drizzle-orm';
 import { analyzeUrl } from '../services/pagespeed.js';
 
-const scheduleEnum = z.enum(['manual', 'hourly', 'every6h', 'every12h', 'daily', 'weekly']);
+const scheduleEnum = z.enum(['manual', 'daily']);
 
 const createSchema = z.object({
   url: z.string().url(),

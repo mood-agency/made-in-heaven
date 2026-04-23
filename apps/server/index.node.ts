@@ -9,7 +9,7 @@ import type { Variables } from './types.js';
 
 mkdirSync('./data', { recursive: true });
 
-const db = createDbNode('file:./data/psi.db');
+const db = createDbNode('file:./data/mih.db');
 const apiKey = process.env.PAGESPEED_API_KEY;
 const port = Number(process.env.PORT ?? 3001);
 

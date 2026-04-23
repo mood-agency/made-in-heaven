@@ -22,11 +22,7 @@ import { Plus, X } from 'lucide-react';
 
 const SCHEDULES = [
   { value: 'manual', label: 'Manual only' },
-  { value: 'hourly', label: 'Every hour' },
-  { value: 'every6h', label: 'Every 6 hours' },
-  { value: 'every12h', label: 'Every 12 hours' },
   { value: 'daily', label: 'Daily (9 AM)' },
-  { value: 'weekly', label: 'Weekly (Mon 9 AM)' },
 ];
 
 export default function AddUrlDialog() {

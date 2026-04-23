@@ -29,11 +29,7 @@ import { Upload, Plus, Trash2, FileUp } from 'lucide-react';
 
 const SCHEDULES = [
   { value: 'manual', label: 'Manual' },
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'every6h', label: 'Every 6h' },
-  { value: 'every12h', label: 'Every 12h' },
   { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
 ];
 
 interface Row {
@@ -88,7 +84,7 @@ function parseCSV(text: string): Row[] {
       fields.push(current);
 
       const [url = '', name = '', schedule = 'manual', tags = ''] = fields.map((f) => f.trim());
-      const validSchedules = ['manual', 'hourly', 'every6h', 'every12h', 'daily', 'weekly'];
+      const validSchedules = ['manual', 'daily'];
       return {
         id: ++rowCounter,
         url,

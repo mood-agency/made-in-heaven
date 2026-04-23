@@ -36,21 +36,21 @@ export default function Dashboard() {
 
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(
-    () => (localStorage.getItem('psi-view') ?? 'grid') as ViewMode,
+    () => (localStorage.getItem('mih-view') ?? 'grid') as ViewMode,
   );
   const [sortMode, setSortMode] = useState<SortMode>(
-    () => (localStorage.getItem('psi-sort') ?? 'manual') as SortMode,
+    () => (localStorage.getItem('mih-sort') ?? 'manual') as SortMode,
   );
   const [localUrls, setLocalUrls] = useState<Url[]>([]);
 
   function changeView(mode: ViewMode) {
     setViewMode(mode);
-    localStorage.setItem('psi-view', mode);
+    localStorage.setItem('mih-view', mode);
   }
 
   function changeSort(mode: SortMode) {
     setSortMode(mode);
-    localStorage.setItem('psi-sort', mode);
+    localStorage.setItem('mih-sort', mode);
   }
 
   async function handleAnalyzeAll() {

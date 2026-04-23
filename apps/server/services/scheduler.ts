@@ -5,11 +5,7 @@ import { eq } from 'drizzle-orm';
 import { analyzeUrl } from './pagespeed.js';
 
 const CRON_MAP: Record<string, string> = {
-  hourly:   '0 * * * *',
-  every6h:  '0 */6 * * *',
-  every12h: '0 */12 * * *',
-  daily:    '0 9 * * *',
-  weekly:   '0 9 * * 1',
+  daily: '0 9 * * *',
 };
 
 const jobs = new Map<number, cron.ScheduledTask>();

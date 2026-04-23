@@ -1,5 +1,5 @@
 {
-  "name": "@psi/server",
+  "name": "@mih/server",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
     "types": "wrangler types",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:migrate:local": "wrangler d1 migrations apply psi-report --local",
-    "db:migrate:remote": "wrangler d1 migrations apply psi-report --remote",
+    "db:migrate:local": "wrangler d1 migrations apply made-in-heaven --local",
+    "db:migrate:remote": "wrangler d1 migrations apply made-in-heaven --remote",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

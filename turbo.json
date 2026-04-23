@@ -14,7 +14,7 @@
       "persistent": true
     },
     "deploy": {
-      "dependsOn": ["^build", "@psi/client#build"],
+      "dependsOn": ["^build", "@mih/client#build"],
       "cache": false
     },
     "types": {

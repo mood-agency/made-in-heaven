@@ -23,7 +23,7 @@
 
     /* Path aliases */
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"], "@psi/server": ["../server/app.ts"] },
+    "paths": { "@/*": ["./src/*"], "@mih/server": ["../server/app.ts"] },
     "ignoreDeprecations": "6.0"
   },
   "include": ["src"]

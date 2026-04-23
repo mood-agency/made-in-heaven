@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '@/lib/rpc';
 
-export type ScheduleInterval = 'manual' | 'hourly' | 'every6h' | 'every12h' | 'daily' | 'weekly';
+export type ScheduleInterval = 'manual' | 'daily';
 
 export interface Url {
   id: number;
