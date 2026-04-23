@@ -5,6 +5,7 @@ import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, useTags, type ScheduleI
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -26,6 +27,58 @@ const SCHEDULES = [
   { value: 'daily', label: 'Daily (9 AM)' },
   { value: 'weekly', label: 'Weekly (Mon 9 AM)' },
 ];
+
+function latestPerDay(analyses: Analysis[]): Analysis[] {
+  const seen = new Set<string>();
+  return analyses.filter((a) => {
+    if (!a.analyzedAt) return false;
+    const day = new Date(a.analyzedAt).toLocaleDateString();
+    if (seen.has(day)) return false;
+    seen.add(day);
+    return true;
+  });
+}
+
+function AnalysisTable({ analyses, strategy }: { analyses: Analysis[]; strategy: string }) {
+  if (analyses.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-medium capitalize">{strategy}</p>
+      <div className="rounded-md border overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead className="text-right">Score</TableHead>
+              <TableHead className="text-right">FCP</TableHead>
+              <TableHead className="text-right">LCP</TableHead>
+              <TableHead className="text-right">TBT</TableHead>
+              <TableHead className="text-right">CLS</TableHead>
+              <TableHead className="text-right">SI</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {analyses.map((a) => (
+              <TableRow key={a.id}>
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                  {a.analyzedAt ? new Date(a.analyzedAt).toLocaleString() : '—'}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {a.performanceScore ?? '—'}
+                </TableCell>
+                <TableCell className="text-right">{a.fcp ? `${Math.round(a.fcp)}ms` : '—'}</TableCell>
+                <TableCell className="text-right">{a.lcp ? `${Math.round(a.lcp)}ms` : '—'}</TableCell>
+                <TableCell className="text-right">{a.tbt ? `${Math.round(a.tbt)}ms` : '—'}</TableCell>
+                <TableCell className="text-right">{a.cls?.toFixed(3) ?? '—'}</TableCell>
+                <TableCell className="text-right">{a.si ? `${Math.round(a.si)}ms` : '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
 
 function MetricRow({ label, value }: { label: string; value: string }) {
   return (
@@ -270,20 +323,37 @@ export default function UrlDetail() {
       {(mobileQ.isLoading || desktopQ.isLoading) && <Skeleton className="h-48 w-full" />}
 
       {hasHistory && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">
-              History — {Math.max(mobile.length, desktop.length)} analyses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {METRICS.map((m) => (
-                <MetricChart key={m.key as string} mobile={mobile} desktop={desktop} metric={m} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                History — {Math.max(mobile.length, desktop.length)} analyses
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {METRICS.map((m) => (
+                  <MetricChart
+                    key={m.key as string}
+                    mobile={latestPerDay(mobile)}
+                    desktop={latestPerDay(desktop)}
+                    metric={m}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">All results</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              <AnalysisTable analyses={mobile} strategy="mobile" />
+              <AnalysisTable analyses={desktop} strategy="desktop" />
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );
