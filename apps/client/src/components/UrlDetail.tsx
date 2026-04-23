@@ -71,8 +71,9 @@ export default function UrlDetail() {
   const { data: urls } = useUrls();
   const urlData = urls?.find((u) => u.id === urlId);
 
-  const mobileQ = useAnalyses(urlId, 'mobile');
-  const desktopQ = useAnalyses(urlId, 'desktop');
+  const analysesQ = useAnalyses(urlId);
+  const mobileQ = { ...analysesQ, data: analysesQ.data?.filter((a) => a.strategy === 'mobile') };
+  const desktopQ = { ...analysesQ, data: analysesQ.data?.filter((a) => a.strategy === 'desktop') };
   const analyze = useAnalyze();
   const updateUrl = useUpdateUrl();
   const { data: existingTags = [] } = useTags();

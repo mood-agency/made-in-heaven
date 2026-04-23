@@ -55,8 +55,8 @@ export function MetricChart({ mobile, desktop, metric }: Props) {
   }));
 
   const chartConfig = {
-    mobile: { label: 'Mobile', color: 'hsl(var(--chart-1))' },
-    desktop: { label: 'Desktop', color: 'hsl(var(--chart-2))' },
+    mobile: { label: 'Mobile', color: 'var(--chart-1)' },
+    desktop: { label: 'Desktop', color: 'var(--chart-2)' },
   };
 
   return (
@@ -76,19 +76,19 @@ export function MetricChart({ mobile, desktop, metric }: Props) {
             <Line
               type="monotone"
               dataKey="mobile"
-              stroke="hsl(var(--chart-1))"
+              stroke="var(--chart-1)"
               strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
+              dot={{ r: 3 }}
+              activeDot={{ r: 5 }}
               connectNulls
             />
             <Line
               type="monotone"
               dataKey="desktop"
-              stroke="hsl(var(--chart-2))"
+              stroke="var(--chart-2)"
               strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
+              dot={{ r: 3 }}
+              activeDot={{ r: 5 }}
               connectNulls
             />
           </LineChart>
