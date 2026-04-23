@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useUrls, useAnalyze, useAnalyzeAll, useDeleteUrl, useUpdateUrl, type Url } from '@/api';
+import {
+  useUrls,
+  useAnalyze,
+  useAnalyzeAll,
+  useAnalyzeSelected,
+  useDeleteUrl,
+  useUpdateUrl,
+  downloadScoresCsv,
+  type Url,
+} from '@/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import ScoreCircle from '@/components/ScoreCircle';
 import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
 import UrlTable from '@/components/UrlTable';
 import { arrayMove } from '@dnd-kit/sortable';
-import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play } from 'lucide-react';
+import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download } from 'lucide-react';
 
 type ViewMode = 'grid' | 'table';
 type SortMode = 'manual' | 'alpha' | 'mobile' | 'desktop';
@@ -31,17 +41,19 @@ export default function Dashboard() {
   const { data: urls, isLoading } = useUrls();
   const analyze = useAnalyze();
   const analyzeAll = useAnalyzeAll();
+  const analyzeSelected = useAnalyzeSelected();
   const deleteUrl = useDeleteUrl();
   const updateUrl = useUpdateUrl();
 
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(
-    () => (localStorage.getItem('mih-view') ?? 'grid') as ViewMode,
+    () => (localStorage.getItem('mih-view') ?? 'table') as ViewMode,
   );
   const [sortMode, setSortMode] = useState<SortMode>(
     () => (localStorage.getItem('mih-sort') ?? 'manual') as SortMode,
   );
   const [localUrls, setLocalUrls] = useState<Url[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   function changeView(mode: ViewMode) {
     setViewMode(mode);
@@ -53,9 +65,58 @@ export default function Dashboard() {
     localStorage.setItem('mih-sort', mode);
   }
 
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = sorted.map((u) => u.id);
+    const allSelected = visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
   async function handleAnalyzeAll() {
     try {
       const data = await analyzeAll.mutateAsync();
+      const count = data.queued ?? data.started ?? 0;
+      const verb = data.queued !== undefined ? 'queued' : 'started';
+      toast.success(`${count} URL${count !== 1 ? 's' : ''} ${verb} for analysis`);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
+  async function handleAnalyzeSelected() {
+    const ids = [...selectedIds];
+    try {
+      const data = await analyzeSelected.mutateAsync(ids);
+      const count = data.queued ?? data.started ?? 0;
+      const verb = data.queued !== undefined ? 'queued' : 'started';
+      toast.success(`${count} URL${count !== 1 ? 's' : ''} ${verb} for analysis`);
+      clearSelection();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
+  async function handleAnalyzeByTag() {
+    const ids = sorted.map((u) => u.id);
+    try {
+      const data = await analyzeSelected.mutateAsync(ids);
       const count = data.queued ?? data.started ?? 0;
       const verb = data.queued !== undefined ? 'queued' : 'started';
       toast.success(`${count} URL${count !== 1 ? 's' : ''} ${verb} for analysis`);
@@ -111,9 +172,10 @@ export default function Dashboard() {
     });
   }, [filtered]);
 
-  // Sync localUrls from server when data changes (after mutations, filter changes, etc.)
+  // Sync localUrls from server when data changes; reset selection on filter change
   useEffect(() => {
     setLocalUrls(filteredManual);
+    setSelectedIds(new Set());
   }, [filteredManual]);
 
   const sorted = useMemo(() => {
@@ -183,6 +245,19 @@ export default function Dashboard() {
             </button>
           </div>
 
+          {/* Run by tag — shown only when tag filter is active */}
+          {activeTag && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAnalyzeByTag}
+              disabled={analyzeSelected.isPending || sorted.length === 0}
+            >
+              <Play className="size-3.5" data-icon="inline-start" />
+              Run &ldquo;{activeTag}&rdquo; ({sorted.length})
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -192,6 +267,24 @@ export default function Dashboard() {
             <Play className="size-3.5" data-icon="inline-start" />
             {analyzeAll.isPending ? 'Queuing…' : 'Run All'}
           </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                await downloadScoresCsv();
+              } catch (err) {
+                toast.error(String(err));
+              }
+            }}
+            disabled={(urls?.length ?? 0) === 0}
+            title="Download scores as CSV"
+          >
+            <Download className="size-3.5" data-icon="inline-start" />
+            Download CSV
+          </Button>
+
           <BulkImportDialog />
           <AddUrlDialog />
         </div>
@@ -223,6 +316,40 @@ export default function Dashboard() {
               <X className="size-3" /> Clear filter
             </button>
           )}
+        </div>
+      )}
+
+      {/* Selection action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted text-sm">
+          <span className="text-muted-foreground">{selectedIds.size} selected</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleAnalyzeSelected}
+            disabled={analyzeSelected.isPending}
+          >
+            <Play className="size-3.5" data-icon="inline-start" />
+            Run Selected ({selectedIds.size})
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              try {
+                await downloadScoresCsv([...selectedIds]);
+              } catch (err) {
+                toast.error(String(err));
+              }
+            }}
+          >
+            <Download className="size-3.5" data-icon="inline-start" />
+            Download CSV
+          </Button>
+          <Button size="sm" variant="ghost" onClick={clearSelection}>
+            <X className="size-3.5" data-icon="inline-start" />
+            Clear
+          </Button>
         </div>
       )}
 
@@ -260,87 +387,99 @@ export default function Dashboard() {
           onAnalyze={handleAnalyze}
           onDelete={handleDelete}
           isAnalyzePending={analyze.isPending}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
         />
       )}
 
       {sorted.length > 0 && viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {sorted.map((u) => (
-            <Card key={u.id} className="flex flex-col">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <CardTitle className="text-base truncate">
-                      {u.name ?? new URL(u.url).hostname}
-                    </CardTitle>
-                    <a
-                      href={u.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-muted-foreground truncate hover:underline flex items-center gap-1"
-                    >
-                      {u.url}
-                      <ExternalLink className="size-3 shrink-0" />
-                    </a>
-                  </div>
-                  <Badge variant="secondary" className="shrink-0 text-xs">
-                    {u.scheduleInterval === 'manual' ? 'Manual' : u.scheduleInterval}
-                  </Badge>
-                </div>
-                {u.tags && u.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {u.tags.map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-                        className="focus:outline-none"
+            <div key={u.id} className="relative">
+              <div className="absolute top-3 left-3 z-10">
+                <Checkbox
+                  checked={selectedIds.has(u.id)}
+                  onCheckedChange={() => toggleSelect(u.id)}
+                  aria-label={`Select ${u.name ?? u.url}`}
+                />
+              </div>
+              <Card className="flex flex-col">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col gap-0.5 min-w-0 pl-6">
+                      <CardTitle className="text-base truncate">
+                        {u.name ?? new URL(u.url).hostname}
+                      </CardTitle>
+                      <a
+                        href={u.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-muted-foreground truncate hover:underline flex items-center gap-1"
                       >
-                        <Badge
-                          variant={activeTag === tag ? 'default' : 'outline'}
-                          className="text-xs cursor-pointer hover:bg-accent transition-colors"
-                        >
-                          {tag}
-                        </Badge>
-                      </button>
-                    ))}
+                        {u.url}
+                        <ExternalLink className="size-3 shrink-0" />
+                      </a>
+                    </div>
+                    <Badge variant="secondary" className="shrink-0 text-xs">
+                      {u.scheduleInterval === 'manual' ? 'Manual' : u.scheduleInterval}
+                    </Badge>
                   </div>
-                )}
-              </CardHeader>
+                  {u.tags && u.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {u.tags.map((tag) => (
+                        <button
+                          key={tag}
+                          onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                          className="focus:outline-none"
+                        >
+                          <Badge
+                            variant={activeTag === tag ? 'default' : 'outline'}
+                            className="text-xs cursor-pointer hover:bg-accent transition-colors"
+                          >
+                            {tag}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </CardHeader>
 
-              <CardContent className="flex-1 flex flex-col gap-4">
-                <div className="flex justify-around">
-                  <ScoreCircle score={u.latestMobile?.performanceScore ?? null} label="Mobile" />
-                  <ScoreCircle score={u.latestDesktop?.performanceScore ?? null} label="Desktop" />
-                </div>
+                <CardContent className="flex-1 flex flex-col gap-4">
+                  <div className="flex justify-around">
+                    <ScoreCircle score={u.latestMobile?.performanceScore ?? null} label="Mobile" />
+                    <ScoreCircle score={u.latestDesktop?.performanceScore ?? null} label="Desktop" />
+                  </div>
 
-                <p className="text-xs text-muted-foreground text-center">
-                  Last analyzed: {timeAgo(u.lastAnalyzed)}
-                </p>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Last analyzed: {timeAgo(u.lastAnalyzed)}
+                  </p>
 
-                <div className="flex gap-2 mt-auto">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => handleAnalyze(u.id)}
-                    disabled={analyze.isPending}
-                  >
-                    <RefreshCw className="size-3.5" data-icon="inline-start" />
-                    Analyze
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1" asChild>
-                    <Link to={`/urls/${u.id}`}>View details</Link>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(u.id, u.name ?? u.url)}
-                  >
-                    <Trash2 className="size-3.5 text-destructive" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="flex gap-2 mt-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleAnalyze(u.id)}
+                      disabled={analyze.isPending}
+                    >
+                      <RefreshCw className="size-3.5" data-icon="inline-start" />
+                      Analyze
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1" asChild>
+                      <Link to={`/urls/${u.id}`}>View details</Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(u.id, u.name ?? u.url)}
+                    >
+                      <Trash2 className="size-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ))}
         </div>
       )}

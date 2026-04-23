@@ -140,6 +140,32 @@ export function useAnalyzeAll() {
   });
 }
 
+export function useAnalyzeSelected() {
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await throwIfError(
+        await rpc.api.urls['analyze-selected'].$post({ json: { ids } }),
+      );
+      return res.json() as Promise<{ queued?: number; started?: number }>;
+    },
+  });
+}
+
+export async function downloadScoresCsv(ids?: number[]): Promise<void> {
+  const params = ids && ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+  const res = await fetch(`/api/analyses/export${params}`);
+  if (!res.ok) throw new Error('Failed to download CSV');
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `scores-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export function useBulkImport() {
   const qc = useQueryClient();
   return useMutation({

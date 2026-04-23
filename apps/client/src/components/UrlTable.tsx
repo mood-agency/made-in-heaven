@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import ScoreCircle from '@/components/ScoreCircle';
 import { RefreshCw, Trash2, ExternalLink, GripVertical } from 'lucide-react';
 import {
@@ -50,9 +51,21 @@ interface RowProps {
   onAnalyze: (id: number) => void;
   onDelete: (id: number, name: string) => void;
   isAnalyzePending: boolean;
+  isSelected: boolean;
+  onToggleSelect: (id: number) => void;
 }
 
-function SortableRow({ url: u, sortMode, activeTag, onTagClick, onAnalyze, onDelete, isAnalyzePending }: RowProps) {
+function SortableRow({
+  url: u,
+  sortMode,
+  activeTag,
+  onTagClick,
+  onAnalyze,
+  onDelete,
+  isAnalyzePending,
+  isSelected,
+  onToggleSelect,
+}: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: u.id,
     disabled: sortMode !== 'manual',
@@ -71,6 +84,14 @@ function SortableRow({ url: u, sortMode, activeTag, onTagClick, onAnalyze, onDel
 
   return (
     <TableRow ref={setNodeRef} style={style} className={isDragging ? 'bg-accent shadow-md' : undefined}>
+      <TableCell className="w-8 px-2">
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelect(u.id)}
+          aria-label={`Select ${displayName}`}
+        />
+      </TableCell>
+
       <TableCell className="w-10 px-2">
         <button
           {...(isManual ? { ...attributes, ...listeners } : {})}
@@ -171,6 +192,9 @@ interface Props {
   onAnalyze: (id: number) => void;
   onDelete: (id: number, name: string) => void;
   isAnalyzePending: boolean;
+  selectedIds: Set<number>;
+  onToggleSelect: (id: number) => void;
+  onToggleSelectAll: () => void;
 }
 
 export default function UrlTable({
@@ -182,6 +206,9 @@ export default function UrlTable({
   onAnalyze,
   onDelete,
   isAnalyzePending,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -197,6 +224,9 @@ export default function UrlTable({
     }
   }
 
+  const allSelected = urls.length > 0 && urls.every((u) => selectedIds.has(u.id));
+  const someSelected = urls.some((u) => selectedIds.has(u.id));
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={urls.map((u) => u.id)} strategy={verticalListSortingStrategy}>
@@ -204,6 +234,13 @@ export default function UrlTable({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8 px-2">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                    onCheckedChange={onToggleSelectAll}
+                    aria-label="Select all"
+                  />
+                </TableHead>
                 <TableHead className="w-10 px-2" />
                 <TableHead>Nombre</TableHead>
                 <TableHead className="hidden lg:table-cell">URL</TableHead>
@@ -226,6 +263,8 @@ export default function UrlTable({
                   onAnalyze={onAnalyze}
                   onDelete={onDelete}
                   isAnalyzePending={isAnalyzePending}
+                  isSelected={selectedIds.has(u.id)}
+                  onToggleSelect={onToggleSelect}
                 />
               ))}
             </TableBody>

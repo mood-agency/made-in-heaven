@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { Variables, Db } from '../types.js';
 import { urls, analyses, tags, urlTags } from '../db/schema/index.js';
-import { eq, desc, inArray } from 'drizzle-orm';
+import { eq, desc, inArray, and } from 'drizzle-orm';
 import { analyzeUrl } from '../services/pagespeed.js';
 
 const scheduleEnum = z.enum(['manual', 'daily']);
@@ -21,6 +21,10 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().nullable().optional(),
   tags: z.array(z.string().min(1)).optional(),
+});
+
+const analyzeSelectedSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1),
 });
 
 const bulkSchema = z.object({
@@ -170,6 +174,34 @@ const router = new Hono<{ Variables: Variables }>()
     })().catch(console.error);
 
     return c.json({ started: activeUrls.length });
+  })
+  .post('/analyze-selected', zValidator('json', analyzeSelectedSchema), async (c) => {
+    const db = c.var.db;
+    const { ids } = c.req.valid('json');
+
+    const selectedUrls = await db
+      .select()
+      .from(urls)
+      .where(and(inArray(urls.id, ids), eq(urls.isActive, true)));
+
+    const enqueue = c.var.enqueueAnalysis;
+    if (enqueue) {
+      await Promise.all(selectedUrls.map((u) => enqueue(u.id, u.url)));
+      return c.json({ queued: selectedUrls.length });
+    }
+
+    const CONCURRENCY = 3;
+    (async () => {
+      for (let i = 0; i < selectedUrls.length; i += CONCURRENCY) {
+        await Promise.all(
+          selectedUrls.slice(i, i + CONCURRENCY).map((u) =>
+            analyzeUrl(db, u.id, u.url, c.var.apiKey).catch(console.error),
+          ),
+        );
+      }
+    })().catch(console.error);
+
+    return c.json({ started: selectedUrls.length });
   })
   .put('/:id', zValidator('json', updateSchema), async (c) => {
     const db = c.var.db;
