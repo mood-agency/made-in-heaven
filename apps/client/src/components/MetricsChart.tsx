@@ -39,7 +39,7 @@ export function MetricChart({ mobile, desktop, metric }: Props) {
   const toMap = (list: Analysis[]) =>
     new Map(
       [...list].reverse().map((a) => [
-        a.analyzedAt ? new Date(a.analyzedAt).toLocaleString() : '',
+        a.analyzedAt ? new Date(a.analyzedAt).toLocaleDateString() : '',
         a[metric.key] as number | null,
       ]),
     );
