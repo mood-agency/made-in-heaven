@@ -68,6 +68,20 @@ function extractDomainTag(urlStr: string): string {
 // D1 SQLite limit is ~100 bound variables per query
 const SQL_CHUNK_SIZE = 100;
 
+const URLS_CACHE_TTL = 10; // seconds
+
+function urlsCacheKey(rawUrl: string): Request {
+  const u = new URL(rawUrl);
+  u.pathname = '/api/urls';
+  u.search = '';
+  return new Request(u.toString());
+}
+
+async function invalidateUrlsCache(rawUrl: string, ctx: ExecutionContext | undefined): Promise<void> {
+  if (typeof caches === 'undefined') return;
+  ctx?.waitUntil(caches.default.delete(urlsCacheKey(rawUrl)));
+}
+
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
@@ -97,6 +111,11 @@ async function getTagsForUrls(db: Db, urlIds: number[]): Promise<Record<number, 
 
 const router = new Hono<{ Variables: Variables }>()
   .get('/', async (c) => {
+    if (typeof caches !== 'undefined') {
+      const cached = await caches.default.match(urlsCacheKey(c.req.url));
+      if (cached) return cached;
+    }
+
     const db = c.var.db;
     const allUrls = await db.select().from(urls);
     const urlIds = allUrls.map((u) => u.id);
@@ -135,7 +154,18 @@ const router = new Hono<{ Variables: Variables }>()
       tags: tagsMap[u.id] ?? [],
     }));
 
-    return c.json(enriched);
+    const response = new Response(JSON.stringify(enriched), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': `s-maxage=${URLS_CACHE_TTL}`,
+      },
+    });
+
+    if (typeof caches !== 'undefined') {
+      c.executionCtx?.waitUntil(caches.default.put(urlsCacheKey(c.req.url), response.clone()));
+    }
+
+    return response;
   })
   .post('/', zValidator('json', createSchema), async (c) => {
     const db = c.var.db;
@@ -147,6 +177,7 @@ const router = new Hono<{ Variables: Variables }>()
     if (data.scheduleInterval !== 'manual') {
       c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
     }
+    await invalidateUrlsCache(c.req.url, c.executionCtx);
     return c.json({ ...result, tags: allTags }, 201);
   })
   .post('/bulk', zValidator('json', bulkSchema), async (c) => {
@@ -179,6 +210,7 @@ const router = new Hono<{ Variables: Variables }>()
       }
     }
 
+    await invalidateUrlsCache(c.req.url, c.executionCtx);
     return c.json({ created, errors }, 201);
   })
   .post('/analyze-all', async (c) => {
@@ -258,6 +290,7 @@ const router = new Hono<{ Variables: Variables }>()
     }
 
     const currentTags = tagNames ?? (await getTagsForUrls(db, [id]))[id] ?? [];
+    await invalidateUrlsCache(c.req.url, c.executionCtx);
     return c.json({ ...updated, tags: currentTags });
   })
   .delete('/:id', async (c) => {
@@ -265,6 +298,7 @@ const router = new Hono<{ Variables: Variables }>()
     const id = Number(c.req.param('id'));
     c.var.removeJob?.(id);
     await db.delete(urls).where(eq(urls.id, id));
+    await invalidateUrlsCache(c.req.url, c.executionCtx);
     return c.body(null, 204);
   })
   .post('/:id/analyze', async (c) => {
