@@ -65,16 +65,30 @@ function extractDomainTag(urlStr: string): string {
   }
 }
 
+// D1 SQLite limit is ~100 bound variables per query
+const SQL_CHUNK_SIZE = 100;
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
+  return result;
+}
+
 async function getTagsForUrls(db: Db, urlIds: number[]): Promise<Record<number, string[]>> {
   if (urlIds.length === 0) return {};
-  const rows = await db
-    .select({ urlId: urlTags.urlId, name: tags.name })
-    .from(urlTags)
-    .innerJoin(tags, eq(urlTags.tagId, tags.id))
-    .where(inArray(urlTags.urlId, urlIds));
+  const chunks = chunkArray(urlIds, SQL_CHUNK_SIZE);
+  const allRows: { urlId: number; name: string }[] = [];
+  for (const chunk of chunks) {
+    const rows = await db
+      .select({ urlId: urlTags.urlId, name: tags.name })
+      .from(urlTags)
+      .innerJoin(tags, eq(urlTags.tagId, tags.id))
+      .where(inArray(urlTags.urlId, chunk));
+    allRows.push(...rows);
+  }
 
   const map: Record<number, string[]> = {};
-  for (const row of rows) {
+  for (const row of allRows) {
     if (!map[row.urlId]) map[row.urlId] = [];
     map[row.urlId].push(row.name);
   }
@@ -87,15 +101,23 @@ const router = new Hono<{ Variables: Variables }>()
     const allUrls = await db.select().from(urls);
     const urlIds = allUrls.map((u) => u.id);
 
-    // 3 queries total instead of N+2: urls + tags + all analyses batched
+    // Chunked queries to stay within D1's SQL variable limit (~100 per query)
+    const fetchAnalyses = async () => {
+      if (urlIds.length === 0) return [] as (typeof analyses.$inferSelect)[];
+      const chunks = chunkArray(urlIds, SQL_CHUNK_SIZE);
+      const rows = await Promise.all(
+        chunks.map((chunk) =>
+          db.select().from(analyses)
+            .where(inArray(analyses.urlId, chunk))
+            .orderBy(desc(analyses.analyzedAt), desc(analyses.id))
+        )
+      );
+      return rows.flat();
+    };
+
     const [tagsMap, allAnalyses] = await Promise.all([
       getTagsForUrls(db, urlIds),
-      urlIds.length > 0
-        ? db.select().from(analyses)
-            .where(inArray(analyses.urlId, urlIds))
-            // id DESC as tiebreaker when two analyses share the same second-precision timestamp
-            .orderBy(desc(analyses.analyzedAt), desc(analyses.id))
-        : Promise.resolve([] as (typeof analyses.$inferSelect)[]),
+      fetchAnalyses(),
     ]);
 
     // One pass to pick the latest mobile and desktop per URL
@@ -136,9 +158,17 @@ const router = new Hono<{ Variables: Variables }>()
     for (const item of items) {
       const { tags: tagNames, ...data } = item;
       try {
-        const [result] = await db.insert(urls).values(data).returning();
         const domain = extractDomainTag(item.url);
         const allTags = Array.from(new Set([...(tagNames ?? []), ...(domain ? [domain] : [])]));
+
+        let [result] = await db.insert(urls).values(data).onConflictDoNothing().returning();
+        if (!result) {
+          // URL already exists — update its tags
+          [result] = await db.select().from(urls).where(eq(urls.url, item.url)).limit(1);
+          if (result) await setUrlTags(db, result.id, allTags);
+          continue;
+        }
+
         await setUrlTags(db, result.id, allTags);
         if (data.scheduleInterval !== 'manual') {
           c.var.reschedule?.(result.id, result.url, data.scheduleInterval);

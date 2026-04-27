@@ -49,12 +49,18 @@ const router = new Hono<{ Variables: Variables }>()
     const urlIds = [...new Set(allAnalyses.map((r) => r.urlId))];
     const tagsMap: Record<number, string[]> = {};
     if (urlIds.length > 0) {
-      const tagRows = await db
-        .select({ urlId: urlTags.urlId, name: tags.name })
-        .from(urlTags)
-        .innerJoin(tags, eq(urlTags.tagId, tags.id))
-        .where(inArray(urlTags.urlId, urlIds));
-      for (const t of tagRows) {
+      const SQL_CHUNK_SIZE = 100;
+      const chunks: number[][] = [];
+      for (let i = 0; i < urlIds.length; i += SQL_CHUNK_SIZE) chunks.push(urlIds.slice(i, i + SQL_CHUNK_SIZE));
+      const tagRowsAll = (await Promise.all(
+        chunks.map((chunk) =>
+          db.select({ urlId: urlTags.urlId, name: tags.name })
+            .from(urlTags)
+            .innerJoin(tags, eq(urlTags.tagId, tags.id))
+            .where(inArray(urlTags.urlId, chunk))
+        )
+      )).flat();
+      for (const t of tagRowsAll) {
         if (!tagsMap[t.urlId]) tagsMap[t.urlId] = [];
         tagsMap[t.urlId].push(t.name);
       }

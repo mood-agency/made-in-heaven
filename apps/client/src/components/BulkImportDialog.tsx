@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useBulkImport, type ScheduleInterval } from '@/api';
-import { Upload, Plus, Trash2, FileUp } from 'lucide-react';
+import { Upload, Plus, Trash2, FileUp, Download, Loader2 } from 'lucide-react';
 
 const SCHEDULES = [
   { value: 'manual', label: 'Manual' },
@@ -201,6 +201,14 @@ export default function BulkImportDialog() {
               Format: <code className="bg-muted px-1 rounded">url, name, schedule, tags</code>
               &nbsp;— tags separated by commas inside quotes
             </span>
+            <a
+              href="/urls-template.csv"
+              download="urls-template.csv"
+              className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Download className="size-3" />
+              Download template
+            </a>
           </div>
 
           <div className="rounded-md border overflow-auto max-h-[400px]">
@@ -277,13 +285,20 @@ export default function BulkImportDialog() {
             </Table>
           </div>
 
+          {bulkImport.isPending && (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin shrink-0" />
+              Importando {validRows.length} URL{validRows.length !== 1 ? 's' : ''}… esto puede tardar unos segundos.
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={addRow}>
+            <Button variant="ghost" size="sm" onClick={addRow} disabled={bulkImport.isPending}>
               <Plus data-icon="inline-start" />
               Add row
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
+              <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={bulkImport.isPending}>
                 Cancel
               </Button>
               <Button
@@ -291,7 +306,7 @@ export default function BulkImportDialog() {
                 disabled={bulkImport.isPending || validRows.length === 0}
               >
                 {bulkImport.isPending
-                  ? 'Importing…'
+                  ? <><Loader2 className="size-4 animate-spin" />Importando…</>
                   : `Import ${validRows.length} URL${validRows.length !== 1 ? 's' : ''}`}
               </Button>
             </div>

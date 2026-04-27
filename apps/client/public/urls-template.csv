@@ -1,0 +1,4 @@
+url,name,schedule,tags
+https://example.com,My Site,manual,"tag1,tag2"
+https://example.org,My Blog,daily,"prod,ecommerce"
+https://example.net,Landing Page,manual,"staging"
