@@ -25,9 +25,12 @@ const worker = new Hono<{ Bindings: Env; Variables: Variables }>();
 worker.use('*', async (c, next) => {
   c.set('db', createDbD1(c.env.DB));
   c.set('apiKey', c.env.PAGESPEED_API_KEY);
-  c.set('enqueueAnalysis', (urlId, urlStr) =>
-    c.env.ANALYSIS_QUEUE.send({ urlId, urlStr }),
-  );
+  c.set('enqueueAnalysis', async (urlId, urlStr) => {
+    await c.env.ANALYSIS_QUEUE.send({ urlId, urlStr });
+  });
+  c.set('enqueueBatchAnalysis', async (items) => {
+    await c.env.ANALYSIS_QUEUE.sendBatch(items.map((item) => ({ body: item })));
+  });
   await next();
 });
 
@@ -72,4 +75,4 @@ export default {
       }),
     );
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env, AnalysisMessage>;

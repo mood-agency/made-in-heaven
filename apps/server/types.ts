@@ -11,4 +11,5 @@ export type Variables = {
   reschedule?: (urlId: number, urlStr: string, interval: string) => void;
   removeJob?: (urlId: number) => void;
   enqueueAnalysis?: (urlId: number, urlStr: string) => Promise<void>;
+  enqueueBatchAnalysis?: (items: { urlId: number; urlStr: string }[]) => Promise<void>;
 };

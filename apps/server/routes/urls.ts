@@ -217,9 +217,9 @@ const router = new Hono<{ Variables: Variables }>()
     const db = c.var.db;
     const activeUrls = await db.select().from(urls).where(eq(urls.isActive, true));
 
-    const enqueue = c.var.enqueueAnalysis;
-    if (enqueue) {
-      await Promise.all(activeUrls.map((u) => enqueue(u.id, u.url)));
+    const enqueueBatch = c.var.enqueueBatchAnalysis;
+    if (enqueueBatch) {
+      await enqueueBatch(activeUrls.map((u) => ({ urlId: u.id, urlStr: u.url })));
       return c.json({ queued: activeUrls.length });
     }
 
@@ -246,9 +246,9 @@ const router = new Hono<{ Variables: Variables }>()
       .from(urls)
       .where(and(inArray(urls.id, ids), eq(urls.isActive, true)));
 
-    const enqueue = c.var.enqueueAnalysis;
-    if (enqueue) {
-      await Promise.all(selectedUrls.map((u) => enqueue(u.id, u.url)));
+    const enqueueBatch = c.var.enqueueBatchAnalysis;
+    if (enqueueBatch) {
+      await enqueueBatch(selectedUrls.map((u) => ({ urlId: u.id, urlStr: u.url })));
       return c.json({ queued: selectedUrls.length });
     }
 
