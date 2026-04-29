@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -161,9 +161,12 @@ export default function Dashboard() {
     new Set((urls ?? []).flatMap((u) => u.tags ?? []))
   ).sort();
 
-  const filtered = activeTag
-    ? (urls ?? []).filter((u) => u.tags?.includes(activeTag))
-    : (urls ?? []);
+  const filtered = useMemo(
+    () => activeTag
+      ? (urls ?? []).filter((u) => u.tags?.includes(activeTag))
+      : (urls ?? []),
+    [urls, activeTag],
+  );
 
   // Server-side manual order (source of truth for localUrls sync)
   const filteredManual = useMemo(() => {
@@ -177,8 +180,10 @@ export default function Dashboard() {
 
   // Sync localUrls from server when data changes; reset selection on filter change
   useEffect(() => {
-    setLocalUrls(filteredManual);
-    setSelectedIds(new Set());
+    startTransition(() => {
+      setLocalUrls(filteredManual);
+      setSelectedIds(new Set());
+    });
   }, [filteredManual]);
 
   const sorted = useMemo(() => {
