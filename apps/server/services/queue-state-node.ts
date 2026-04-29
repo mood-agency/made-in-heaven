@@ -8,6 +8,7 @@ type WsMsg =
   | { type: 'purge'; urlIds: number[] };
 
 const TERMINAL_TTL = 5 * 60 * 1000;
+const RUNNING_TTL = 60_000;
 const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);
 
 class QueueStateNode {
@@ -34,6 +35,15 @@ class QueueStateNode {
     const entry: QueueEntry = { urlId, status: 'running', updatedAt: Date.now() };
     this.state.set(urlId, entry);
     this.broadcast({ type: 'update', entry });
+    setTimeout(() => {
+      const current = this.state.get(urlId);
+      if (current?.status === 'running') {
+        const failed: QueueEntry = { urlId, status: 'failed', updatedAt: Date.now(), error: 'Analysis timed out' };
+        this.state.set(urlId, failed);
+        this.broadcast({ type: 'update', entry: failed });
+        this.scheduleCleanup();
+      }
+    }, RUNNING_TTL);
   }
 
   markDone(urlId: number) {

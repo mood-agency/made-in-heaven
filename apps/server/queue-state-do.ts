@@ -15,6 +15,7 @@ type WsMsg =
   | { type: 'purge'; urlIds: number[] };
 
 const TERMINAL_TTL = 5 * 60 * 1000;
+const RUNNING_TTL = 60_000;
 const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);
 
 export class QueueStateDO extends DurableObject {
@@ -49,6 +50,7 @@ export class QueueStateDO extends DurableObject {
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
     this.broadcast({ type: 'update', entry });
+    await this.scheduleAlarm(RUNNING_TTL);
   }
 
   async markDone(urlId: number): Promise<void> {
@@ -57,7 +59,7 @@ export class QueueStateDO extends DurableObject {
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
     this.broadcast({ type: 'update', entry });
-    await this.scheduleCleanup();
+    await this.scheduleAlarm(TERMINAL_TTL);
   }
 
   async markFailed(urlId: number, error: string): Promise<void> {
@@ -66,7 +68,7 @@ export class QueueStateDO extends DurableObject {
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
     this.broadcast({ type: 'update', entry });
-    await this.scheduleCleanup();
+    await this.scheduleAlarm(TERMINAL_TTL);
   }
 
   async cancelQueued(urlIds?: number[]): Promise<number> {
@@ -92,7 +94,7 @@ export class QueueStateDO extends DurableObject {
     }
     await this.ctx.storage.put(batch);
     this.broadcast({ type: 'bulk_update', entries: updated });
-    await this.scheduleCleanup();
+    await this.scheduleAlarm(TERMINAL_TTL);
     return toCancel.length;
   }
 
@@ -135,27 +137,42 @@ export class QueueStateDO extends DurableObject {
 
   async alarm(): Promise<void> {
     await this.ensureLoaded();
-    const cutoff = Date.now() - TERMINAL_TTL;
+    const now = Date.now();
+    const terminalCutoff = now - TERMINAL_TTL;
+    const runningCutoff = now - RUNNING_TTL;
+
     const purgedIds: number[] = [];
     const keysToDelete: string[] = [];
+    const timedOut: QueueEntry[] = [];
+    const timedOutBatch: Record<string, QueueEntry> = {};
 
     for (const [urlId, entry] of this.state) {
-      if (TERMINAL_STATUSES.has(entry.status) && entry.updatedAt < cutoff) {
+      if (TERMINAL_STATUSES.has(entry.status) && entry.updatedAt < terminalCutoff) {
         purgedIds.push(urlId);
         keysToDelete.push(`status:${urlId}`);
         this.state.delete(urlId);
+      } else if (entry.status === 'running' && entry.updatedAt < runningCutoff) {
+        const failed: QueueEntry = { urlId, status: 'failed', updatedAt: now, error: 'Analysis timed out' };
+        this.state.set(urlId, failed);
+        timedOutBatch[`status:${urlId}`] = failed;
+        timedOut.push(failed);
       }
     }
 
-    if (purgedIds.length > 0) {
+    if (keysToDelete.length > 0) {
       await this.ctx.storage.delete(keysToDelete);
       this.broadcast({ type: 'purge', urlIds: purgedIds });
     }
 
-    const stillTerminal = [...this.state.values()].some((e) => TERMINAL_STATUSES.has(e.status));
-    if (stillTerminal) {
-      await this.ctx.storage.setAlarm(Date.now() + TERMINAL_TTL);
+    if (timedOut.length > 0) {
+      await this.ctx.storage.put(timedOutBatch);
+      this.broadcast({ type: 'bulk_update', entries: timedOut });
     }
+
+    const hasRunning = [...this.state.values()].some((e) => e.status === 'running');
+    const hasTerminal = [...this.state.values()].some((e) => TERMINAL_STATUSES.has(e.status));
+    if (hasRunning) await this.scheduleAlarm(RUNNING_TTL);
+    else if (hasTerminal) await this.scheduleAlarm(TERMINAL_TTL);
   }
 
   private broadcast(msg: WsMsg) {
@@ -165,10 +182,11 @@ export class QueueStateDO extends DurableObject {
     }
   }
 
-  private async scheduleCleanup() {
+  private async scheduleAlarm(delayMs: number) {
+    const target = Date.now() + delayMs;
     const existing = await this.ctx.storage.getAlarm();
-    if (!existing) {
-      await this.ctx.storage.setAlarm(Date.now() + TERMINAL_TTL);
+    if (!existing || existing > target) {
+      await this.ctx.storage.setAlarm(target);
     }
   }
 }
