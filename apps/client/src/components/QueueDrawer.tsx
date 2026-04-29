@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
-import { Loader2, CheckCircle2, XCircle, Clock, ChevronRight, ChevronLeft, X } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, Url } from '@/api';
 import { Drawer, DrawerPortal, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
@@ -35,7 +35,6 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const failed = entries.filter((e) => e.status === 'failed').length;
   const total = entries.length;
 
-  // Auto-open when queue becomes active
   useEffect(() => {
     if (queueState.size > 0) {
       setOpen(true);
@@ -45,12 +44,12 @@ export default function QueueDrawer({ queueState, urls }: Props) {
 
   if (total === 0 && !open) return null;
 
-  // Floating chip when minimized
+  // Chip when minimized
   if (minimized && total > 0) {
     return (
       <button
         onClick={() => { setMinimized(false); setOpen(true); }}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-card border shadow-lg px-4 py-3 text-sm hover:shadow-xl transition-shadow"
+        className="fixed bottom-0 right-6 z-50 flex items-center gap-2 rounded-t-xl bg-card border border-b-0 shadow-2xl px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
       >
         {running > 0 ? (
           <Loader2 className="size-4 animate-spin text-blue-500 shrink-0" />
@@ -68,7 +67,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                 ? `${failed} con error`
                 : `${done} listo${done > 1 ? 's' : ''}`}
         </span>
-        <ChevronLeft className="size-4 text-muted-foreground" />
+        <ChevronUp className="size-4 text-muted-foreground" />
       </button>
     );
   }
@@ -82,17 +81,19 @@ export default function QueueDrawer({ queueState, urls }: Props) {
           if (!v) setMinimized(false);
         }}
         modal={false}
-        direction="right"
+        direction="bottom"
       >
-        {/* DrawerPortal + raw Content to skip the overlay */}
+        {/* Portal without overlay — custom bottom-right positioning */}
         <DrawerPortal>
           <DrawerPrimitive.Content
             className={cn(
               'fixed z-50 flex flex-col bg-popover text-sm text-popover-foreground',
-              'inset-y-0 right-0 w-80 border-l border-border/60 shadow-2xl rounded-l-xl focus:outline-none',
+              'bottom-0 right-6 w-96 max-h-[70vh]',
+              'rounded-t-xl border border-b-0 shadow-2xl',
+              'focus:outline-none',
             )}
           >
-            <DrawerHeader className="flex-row items-center justify-between py-3 border-b">
+            <DrawerHeader className="flex-row items-center justify-between py-3 border-b shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 {running > 0 && <Loader2 className="size-4 animate-spin text-blue-500 shrink-0" />}
                 <DrawerTitle className="text-sm truncate">
@@ -109,7 +110,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                   className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
                   title="Minimizar"
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronDown className="size-4" />
                 </button>
                 <DrawerClose className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
                   <X className="size-4" />
@@ -118,7 +119,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
             </DrawerHeader>
 
             {/* Status summary */}
-            <div className="flex flex-wrap gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground border-b">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 px-4 py-2 text-xs text-muted-foreground border-b shrink-0">
               {running > 0 && <span className="text-blue-600 font-medium">{running} corriendo</span>}
               {queued > 0 && <span>{queued} en cola</span>}
               {done > 0 && <span className="text-green-600">{done} listo{done > 1 ? 's' : ''}</span>}
@@ -144,12 +145,12 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                       {href && <span className="text-xs text-muted-foreground truncate">{href}</span>}
                     </div>
 
-                    <span className={`text-xs shrink-0 ${
-                      entry.status === 'running' ? 'text-blue-600' :
-                      entry.status === 'done' ? 'text-green-600' :
-                      entry.status === 'failed' ? 'text-destructive' :
-                      'text-muted-foreground'
-                    }`}>
+                    <span className={cn('text-xs shrink-0', {
+                      'text-blue-600': entry.status === 'running',
+                      'text-green-600': entry.status === 'done',
+                      'text-destructive': entry.status === 'failed',
+                      'text-muted-foreground': entry.status === 'queued',
+                    })}>
                       {entry.status === 'running' && 'Analizando…'}
                       {entry.status === 'queued' && 'En cola'}
                       {entry.status === 'done' && 'Listo'}
