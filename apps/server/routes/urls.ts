@@ -70,10 +70,10 @@ const SQL_CHUNK_SIZE = 100;
 
 const URLS_CACHE_TTL = 10; // seconds
 
-function urlsCacheKey(rawUrl: string): Request {
+function urlsCacheKey(rawUrl: string, date?: string): Request {
   const u = new URL(rawUrl);
   u.pathname = '/api/urls';
-  u.search = '';
+  u.search = date ? `?date=${date}` : '';
   return new Request(u.toString());
 }
 
@@ -82,6 +82,7 @@ type CfCacheStorage = { default: Cache };
 
 async function invalidateUrlsCache(rawUrl: string, ctx: ExecCtx | undefined): Promise<void> {
   if (typeof caches === 'undefined') return;
+  // Invalidate both the unfiltered and any date-filtered cache entries
   ctx?.waitUntil((caches as unknown as CfCacheStorage).default.delete(urlsCacheKey(rawUrl)));
 }
 
@@ -112,10 +113,14 @@ async function getTagsForUrls(db: Db, urlIds: number[]): Promise<Record<number, 
   return map;
 }
 
+const getQuerySchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+
 const router = new Hono<{ Variables: Variables }>()
-  .get('/', async (c) => {
+  .get('/', zValidator('query', getQuerySchema), async (c) => {
+    const { date } = c.req.valid('query');
+
     if (typeof caches !== 'undefined') {
-      const cached = await (caches as unknown as CfCacheStorage).default.match(urlsCacheKey(c.req.url));
+      const cached = await (caches as unknown as CfCacheStorage).default.match(urlsCacheKey(c.req.url, date));
       if (cached) return cached;
     }
 
@@ -142,15 +147,33 @@ const router = new Hono<{ Variables: Variables }>()
       fetchAnalyses(),
     ]);
 
-    // One pass to pick the latest mobile and desktop per URL
+    // When date filter is active, restrict analyses to that UTC day
+    const relevantAnalyses = date
+      ? (() => {
+          const dayStart = new Date(`${date}T00:00:00.000Z`).getTime();
+          const dayEnd = new Date(`${date}T23:59:59.999Z`).getTime();
+          return allAnalyses.filter((a) => {
+            if (!a.analyzedAt) return false;
+            const t = (a.analyzedAt as Date).getTime();
+            return t >= dayStart && t <= dayEnd;
+          });
+        })()
+      : allAnalyses;
+
+    // One pass to pick the best mobile and desktop per URL (from the relevant day)
     const mobileMap: Record<number, typeof allAnalyses[0]> = {};
     const desktopMap: Record<number, typeof allAnalyses[0]> = {};
-    for (const a of allAnalyses) {
+    for (const a of relevantAnalyses) {
       if (!mobileMap[a.urlId] && a.strategy === 'mobile') mobileMap[a.urlId] = a;
       if (!desktopMap[a.urlId] && a.strategy === 'desktop') desktopMap[a.urlId] = a;
     }
 
-    const enriched = allUrls.map((u) => ({
+    // When date filter is active, only return URLs that have at least one analysis that day
+    const filteredUrls = date
+      ? allUrls.filter((u) => mobileMap[u.id] || desktopMap[u.id])
+      : allUrls;
+
+    const enriched = filteredUrls.map((u) => ({
       ...u,
       latestMobile: mobileMap[u.id] ?? null,
       latestDesktop: desktopMap[u.id] ?? null,
@@ -165,7 +188,7 @@ const router = new Hono<{ Variables: Variables }>()
     });
 
     if (typeof caches !== 'undefined') {
-      c.executionCtx?.waitUntil((caches as unknown as CfCacheStorage).default.put(urlsCacheKey(c.req.url), response.clone()));
+      c.executionCtx?.waitUntil((caches as unknown as CfCacheStorage).default.put(urlsCacheKey(c.req.url, date), response.clone()));
     }
 
     return response;

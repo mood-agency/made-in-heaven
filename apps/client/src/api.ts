@@ -66,11 +66,13 @@ async function throwIfError(res: Response) {
 
 // ─── URLs ───────────────────────────────────────────────────────────────────
 
-export function useUrls() {
+export function useUrls(date?: string) {
   return useQuery<Url[]>({
-    queryKey: ['urls'],
+    queryKey: ['urls', date],
     queryFn: async () => {
-      const res = await throwIfError(await rpc.api.urls.$get());
+      const res = await throwIfError(
+        await rpc.api.urls.$get({ query: date ? { date } : {} }),
+      );
       return res.json() as Promise<Url[]>;
     },
   });

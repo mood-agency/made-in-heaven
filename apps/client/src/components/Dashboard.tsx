@@ -23,7 +23,9 @@ import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
 import UrlTable from '@/components/UrlTable';
 import { arrayMove } from '@dnd-kit/sortable';
-import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download, Search, ChevronLeft, ChevronRight, Loader2, CalendarIcon } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 type ViewMode = 'grid' | 'table';
 type SortMode = 'manual' | 'alpha' | 'url' | 'mobile' | 'desktop';
@@ -40,7 +42,9 @@ function timeAgo(date: string | null): string {
 }
 
 export default function Dashboard() {
-  const { data: urls, isLoading } = useUrls();
+  const [activeDate, setActiveDate] = useState<Date | undefined>(undefined);
+  const activeDateStr = activeDate ? activeDate.toLocaleDateString('en-CA') : undefined;
+  const { data: urls, isLoading } = useUrls(activeDateStr);
   const analyze = useAnalyze();
   const analyzeAll = useAnalyzeAll();
   const analyzeSelected = useAnalyzeSelected();
@@ -116,8 +120,8 @@ export default function Dashboard() {
     }
   }
 
-  async function handleAnalyzeByTag() {
-    const ids = sorted.map((u) => u.id);
+  async function handleAnalyzeFiltered() {
+    const ids = searched.map((u) => u.id);
     try {
       const data = await analyzeSelected.mutateAsync(ids);
       const count = data.queued ?? data.started ?? 0;
@@ -224,7 +228,7 @@ export default function Dashboard() {
     [searched, currentPage, pageSize],
   );
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, activeTag]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, activeTag, activeDateStr]);
 
   const toggleSelectAll = () => {
     const visibleIds = paginated.map((u) => u.id);
@@ -281,35 +285,36 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Run by tag — shown only when tag filter is active */}
-          {activeTag && (
+          {/* Run filtered — shown when any filter is active */}
+          {(activeTag || searchQuery.trim() || activeDate) ? (
             <Button
               variant="outline"
               size="sm"
-              onClick={handleAnalyzeByTag}
-              disabled={analyzeSelected.isPending || sorted.length === 0}
+              onClick={handleAnalyzeFiltered}
+              disabled={analyzeSelected.isPending || searched.length === 0}
             >
               <Play className="size-3.5" data-icon="inline-start" />
-              Run &ldquo;{activeTag}&rdquo; ({sorted.length})
+              Run filtered ({searched.length})
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAnalyzeAll}
+              disabled={analyzeAll.isPending || (urls?.length ?? 0) === 0}
+            >
+              <Play className="size-3.5" data-icon="inline-start" />
+              {analyzeAll.isPending ? 'Queuing…' : 'Run All'}
             </Button>
           )}
 
           <Button
             variant="outline"
             size="sm"
-            onClick={handleAnalyzeAll}
-            disabled={analyzeAll.isPending || (urls?.length ?? 0) === 0}
-          >
-            <Play className="size-3.5" data-icon="inline-start" />
-            {analyzeAll.isPending ? 'Queuing…' : 'Run All'}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
             onClick={async () => {
               try {
-                await downloadScoresCsv();
+                const isFiltered = activeTag !== null || searchQuery.trim() !== '' || activeDate !== undefined;
+                await downloadScoresCsv(isFiltered ? searched.map((u) => u.id) : undefined);
               } catch (err) {
                 toast.error(String(err));
               }
@@ -318,7 +323,7 @@ export default function Dashboard() {
             title="Download scores as CSV"
           >
             <Download className="size-3.5" data-icon="inline-start" />
-            Download CSV
+            {(activeTag || searchQuery.trim() || activeDate) ? `Download CSV (${searched.length})` : 'Download CSV'}
           </Button>
 
           <BulkImportDialog />
@@ -345,30 +350,68 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Tag filter bar */}
-      {allTags.length > 0 && (
+      {/* Tag filter bar + date filter */}
+      {(allTags.length > 0 || true) && (
         <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-muted-foreground">Filter by tag:</span>
-          {allTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-              className="focus:outline-none"
-            >
-              <Badge
-                variant={activeTag === tag ? 'default' : 'outline'}
-                className="cursor-pointer hover:bg-accent transition-colors"
+          {allTags.length > 0 && (
+            <>
+              <span className="text-xs text-muted-foreground">Filter by tag:</span>
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  className="focus:outline-none"
+                >
+                  <Badge
+                    variant={activeTag === tag ? 'default' : 'outline'}
+                    className="cursor-pointer hover:bg-accent transition-colors"
+                  >
+                    {tag}
+                  </Badge>
+                </button>
+              ))}
+              {activeTag && (
+                <button
+                  onClick={() => setActiveTag(null)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3" /> Clear
+                </button>
+              )}
+              <span className="text-muted-foreground/40 text-xs">|</span>
+            </>
+          )}
+
+          {/* Date filter */}
+          <span className="text-xs text-muted-foreground">Date:</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={activeDate ? 'default' : 'outline'}
+                size="sm"
+                className="h-7 px-2 text-xs gap-1.5"
               >
-                {tag}
-              </Badge>
-            </button>
-          ))}
-          {activeTag && (
+                <CalendarIcon className="size-3.5" />
+                {activeDate
+                  ? activeDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'All dates'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={activeDate}
+                onSelect={(day) => setActiveDate(day ?? undefined)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+          {activeDate && (
             <button
-              onClick={() => setActiveTag(null)}
+              onClick={() => setActiveDate(undefined)}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
-              <X className="size-3" /> Clear filter
+              <X className="size-3" /> Clear
             </button>
           )}
         </div>
