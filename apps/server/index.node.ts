@@ -26,6 +26,7 @@ nodeServer.use('*', async (c, next) => {
   c.set('enqueueAnalysis', async (urlId, urlStr) => {
     queueStateNode.markQueued([urlId]);
     void (async () => {
+      if (queueStateNode.isCancelled(urlId)) return;
       queueStateNode.markRunning(urlId);
       try {
         await analyzeUrl(db, urlId, urlStr, apiKey);
@@ -43,6 +44,7 @@ nodeServer.use('*', async (c, next) => {
       for (let i = 0; i < items.length; i += CONCURRENCY) {
         await Promise.all(
           items.slice(i, i + CONCURRENCY).map(async ({ urlId, urlStr }) => {
+            if (queueStateNode.isCancelled(urlId)) return;
             queueStateNode.markRunning(urlId);
             try {
               await analyzeUrl(db, urlId, urlStr, apiKey);
@@ -61,6 +63,12 @@ nodeServer.use('*', async (c, next) => {
 nodeServer.route('/', app);
 
 nodeServer.get('/api/queue/state', (c) => c.json(queueStateNode.getSnapshot()));
+
+nodeServer.post('/api/queue/cancel', async (c) => {
+  const body: { urlIds?: number[] } = await c.req.json().catch(() => ({}));
+  const cancelled = queueStateNode.cancelQueued(body.urlIds);
+  return c.json({ cancelled });
+});
 
 async function main() {
   await initScheduler(db, apiKey);

@@ -62,6 +62,13 @@ worker.get('/api/queue/state', async (c) => {
   return c.json(entries);
 });
 
+worker.post('/api/queue/cancel', async (c) => {
+  const stub = getQueueStateStub(c.env);
+  const body: { urlIds?: number[] } = await c.req.json().catch(() => ({}));
+  const cancelled = await stub.cancelQueued(body.urlIds);
+  return c.json({ cancelled });
+});
+
 // Serve the React SPA for all non-API routes
 worker.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
@@ -99,6 +106,10 @@ export default {
     const qsStub = getQueueStateStub(env);
     await Promise.all(
       batch.messages.map(async (msg) => {
+        if (await qsStub.isCancelled(msg.body.urlId)) {
+          msg.ack();
+          return;
+        }
         try {
           await qsStub.markRunning(msg.body.urlId);
           await analyzeUrl(db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY);

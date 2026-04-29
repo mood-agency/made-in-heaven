@@ -1,6 +1,6 @@
 export interface QueueEntry {
   urlId: number;
-  status: 'queued' | 'running' | 'done' | 'failed';
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   updatedAt: number;
   error?: string;
 }

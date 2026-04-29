@@ -8,6 +8,7 @@ type WsMsg =
   | { type: 'purge'; urlIds: number[] };
 
 const TERMINAL_TTL = 5 * 60 * 1000;
+const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);
 
 class QueueStateNode {
   private state = new Map<number, QueueEntry>();
@@ -49,6 +50,27 @@ class QueueStateNode {
     this.scheduleCleanup();
   }
 
+  cancelQueued(urlIds?: number[]): number {
+    const now = Date.now();
+    const updated: QueueEntry[] = [];
+    for (const [, entry] of this.state) {
+      if (entry.status !== 'queued') continue;
+      if (urlIds && !urlIds.includes(entry.urlId)) continue;
+      const cancelled: QueueEntry = { urlId: entry.urlId, status: 'cancelled', updatedAt: now };
+      this.state.set(entry.urlId, cancelled);
+      updated.push(cancelled);
+    }
+    if (updated.length > 0) {
+      this.broadcast({ type: 'bulk_update', entries: updated });
+      this.scheduleCleanup();
+    }
+    return updated.length;
+  }
+
+  isCancelled(urlId: number): boolean {
+    return this.state.get(urlId)?.status === 'cancelled';
+  }
+
   getSnapshot(): QueueEntry[] {
     return [...this.state.values()];
   }
@@ -69,13 +91,13 @@ class QueueStateNode {
       const cutoff = Date.now() - TERMINAL_TTL;
       const purgedIds: number[] = [];
       for (const [urlId, entry] of this.state) {
-        if ((entry.status === 'done' || entry.status === 'failed') && entry.updatedAt < cutoff) {
+        if (TERMINAL_STATUSES.has(entry.status) && entry.updatedAt < cutoff) {
           purgedIds.push(urlId);
           this.state.delete(urlId);
         }
       }
       if (purgedIds.length > 0) this.broadcast({ type: 'purge', urlIds: purgedIds });
-      const stillTerminal = [...this.state.values()].some(e => e.status === 'done' || e.status === 'failed');
+      const stillTerminal = [...this.state.values()].some(e => TERMINAL_STATUSES.has(e.status));
       if (!stillTerminal && this.cleanupTimer) {
         clearInterval(this.cleanupTimer);
         this.cleanupTimer = null;

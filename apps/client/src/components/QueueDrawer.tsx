@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
-import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, Url } from '@/api';
+import { useCancelQueue } from '@/api';
 import { Drawer, DrawerPortal, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import {
   Tooltip,
@@ -12,7 +13,7 @@ import {
 } from '@/components/ui/tooltip';
 
 function statusOrder(s: QueueEntry['status']) {
-  return s === 'running' ? 0 : s === 'queued' ? 1 : s === 'failed' ? 2 : 3;
+  return s === 'running' ? 0 : s === 'queued' ? 1 : s === 'failed' ? 2 : s === 'cancelled' ? 3 : 4;
 }
 
 interface Props {
@@ -24,9 +25,10 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const cancelQueue = useCancelQueue();
 
   const entries = [...queueState.values()]
-    .filter((e) => !(e.status === 'done' && dismissed.has(e.urlId)))
+    .filter((e) => !((e.status === 'done' || e.status === 'cancelled') && dismissed.has(e.urlId)))
     .sort((a, b) => statusOrder(a.status) - statusOrder(b.status));
   const urlMap = new Map(urls.map((u) => [u.id, u]));
 
@@ -34,6 +36,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const queued = entries.filter((e) => e.status === 'queued').length;
   const done = entries.filter((e) => e.status === 'done').length;
   const failed = entries.filter((e) => e.status === 'failed').length;
+  const cancelled = entries.filter((e) => e.status === 'cancelled').length;
   const total = entries.length;
 
   useEffect(() => {
@@ -106,6 +109,16 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                 </DrawerTitle>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                {queued > 0 && (
+                  <button
+                    onClick={() => cancelQueue.mutate(undefined)}
+                    disabled={cancelQueue.isPending}
+                    className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+                    title="Cancelar todo"
+                  >
+                    <Ban className="size-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => { setMinimized(true); setOpen(false); }}
                   className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
@@ -125,6 +138,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
               {queued > 0 && <span>{queued} en cola</span>}
               {done > 0 && <span className="text-green-600">{done} listo{done > 1 ? 's' : ''}</span>}
               {failed > 0 && <span className="text-destructive">{failed} error{failed > 1 ? 'es' : ''}</span>}
+              {cancelled > 0 && <span className="text-muted-foreground">{cancelled} cancelado{cancelled > 1 ? 's' : ''}</span>}
             </div>
 
             {/* Item list */}
@@ -140,6 +154,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                     {entry.status === 'queued' && <Clock className="size-4 shrink-0 text-muted-foreground" />}
                     {entry.status === 'done' && <CheckCircle2 className="size-4 shrink-0 text-green-500" />}
                     {entry.status === 'failed' && <XCircle className="size-4 shrink-0 text-destructive" />}
+                    {entry.status === 'cancelled' && <Ban className="size-4 shrink-0 text-muted-foreground" />}
 
                     <div className="flex flex-col min-w-0 flex-1">
                       <span className="text-sm truncate">{name}</span>
@@ -157,14 +172,34 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                           <X className="size-3.5" />
                         </button>
                       </span>
+                    ) : entry.status === 'queued' ? (
+                      <span className="relative shrink-0 w-12 flex items-center justify-end">
+                        <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity">En cola</span>
+                        <button
+                          onClick={() => cancelQueue.mutate([entry.urlId])}
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          title="Cancelar"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
+                    ) : entry.status === 'cancelled' ? (
+                      <span className="relative shrink-0 w-16 flex items-center justify-end">
+                        <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity">Cancelado</span>
+                        <button
+                          onClick={() => setDismissed((prev) => new Set([...prev, entry.urlId]))}
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                          title="Descartar"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
                     ) : (
                       <span className={cn('text-xs shrink-0', {
                         'text-blue-600': entry.status === 'running',
                         'text-destructive': entry.status === 'failed',
-                        'text-muted-foreground': entry.status === 'queued',
                       })}>
                         {entry.status === 'running' && 'Analizando…'}
-                        {entry.status === 'queued' && 'En cola'}
                         {entry.status === 'failed' && (
                           <Tooltip>
                             <TooltipTrigger asChild>

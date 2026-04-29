@@ -66,6 +66,8 @@ function QueueStatusBadge({ entry }: { entry: QueueEntry | undefined }) {
     );
   if (entry.status === 'done')
     return <Badge variant="outline" className="text-xs shrink-0 text-green-600 border-green-200">Listo</Badge>;
+  if (entry.status === 'cancelled')
+    return <Badge variant="secondary" className="text-xs shrink-0 text-muted-foreground">Cancelado</Badge>;
   return null;
 }
 
@@ -201,7 +203,7 @@ function SortableRow({
             variant="ghost"
             size="sm"
             onClick={() => onAnalyze(u.id)}
-            disabled={isAnalyzePending || queueEntry?.status === 'queued' || queueEntry?.status === 'running'}
+            disabled={isAnalyzePending || queueEntry?.status === 'queued' || queueEntry?.status === 'running' || queueEntry?.status === 'cancelled'}
             title="Analizar"
           >
             {queueEntry?.status === 'running' ? (

@@ -3,7 +3,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 export interface QueueEntry {
   urlId: number;
-  status: 'queued' | 'running' | 'done' | 'failed';
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   updatedAt: number;
   error?: string;
 }
@@ -15,6 +15,7 @@ type WsMsg =
   | { type: 'purge'; urlIds: number[] };
 
 const TERMINAL_TTL = 5 * 60 * 1000;
+const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);
 
 export class QueueStateDO extends DurableObject {
   private state = new Map<number, QueueEntry>();
@@ -68,6 +69,38 @@ export class QueueStateDO extends DurableObject {
     await this.scheduleCleanup();
   }
 
+  async cancelQueued(urlIds?: number[]): Promise<number> {
+    await this.ensureLoaded();
+    const now = Date.now();
+    const toCancel: QueueEntry[] = [];
+
+    for (const [, entry] of this.state) {
+      if (entry.status !== 'queued') continue;
+      if (urlIds && !urlIds.includes(entry.urlId)) continue;
+      toCancel.push(entry);
+    }
+
+    if (toCancel.length === 0) return 0;
+
+    const batch: Record<string, QueueEntry> = {};
+    const updated: QueueEntry[] = [];
+    for (const entry of toCancel) {
+      const cancelled: QueueEntry = { urlId: entry.urlId, status: 'cancelled', updatedAt: now };
+      this.state.set(entry.urlId, cancelled);
+      batch[`status:${entry.urlId}`] = cancelled;
+      updated.push(cancelled);
+    }
+    await this.ctx.storage.put(batch);
+    this.broadcast({ type: 'bulk_update', entries: updated });
+    await this.scheduleCleanup();
+    return toCancel.length;
+  }
+
+  async isCancelled(urlId: number): Promise<boolean> {
+    await this.ensureLoaded();
+    return this.state.get(urlId)?.status === 'cancelled';
+  }
+
   async getSnapshot(): Promise<QueueEntry[]> {
     await this.ensureLoaded();
     return [...this.state.values()];
@@ -87,9 +120,7 @@ export class QueueStateDO extends DurableObject {
   }
 
   async webSocketMessage(_ws: WebSocket, _msg: string | ArrayBuffer): Promise<void> {}
-
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
-
   async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {}
 
   async alarm(): Promise<void> {
@@ -99,7 +130,7 @@ export class QueueStateDO extends DurableObject {
     const keysToDelete: string[] = [];
 
     for (const [urlId, entry] of this.state) {
-      if ((entry.status === 'done' || entry.status === 'failed') && entry.updatedAt < cutoff) {
+      if (TERMINAL_STATUSES.has(entry.status) && entry.updatedAt < cutoff) {
         purgedIds.push(urlId);
         keysToDelete.push(`status:${urlId}`);
         this.state.delete(urlId);
@@ -111,9 +142,7 @@ export class QueueStateDO extends DurableObject {
       this.broadcast({ type: 'purge', urlIds: purgedIds });
     }
 
-    const stillTerminal = [...this.state.values()].some(
-      (e) => e.status === 'done' || e.status === 'failed',
-    );
+    const stillTerminal = [...this.state.values()].some((e) => TERMINAL_STATUSES.has(e.status));
     if (stillTerminal) {
       await this.ctx.storage.setAlarm(Date.now() + TERMINAL_TTL);
     }
@@ -122,9 +151,7 @@ export class QueueStateDO extends DurableObject {
   private broadcast(msg: WsMsg) {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
-      try {
-        ws.send(data);
-      } catch {}
+      try { ws.send(data); } catch {}
     }
   }
 

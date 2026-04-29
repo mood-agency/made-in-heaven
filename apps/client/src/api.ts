@@ -137,6 +137,21 @@ export function useAnalyzeSelected() {
   });
 }
 
+export function useCancelQueue() {
+  return useMutation({
+    mutationFn: async (urlIds?: number[]) => {
+      const res = await throwIfError(
+        await fetch('/api/queue/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urlIds }),
+        }),
+      );
+      return res.json() as Promise<{ cancelled: number }>;
+    },
+  });
+}
+
 export function useQueueState(): Map<number, QueueEntry> {
   const qc = useQueryClient();
   const [state, setState] = useState<Map<number, QueueEntry>>(new Map());
