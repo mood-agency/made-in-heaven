@@ -40,7 +40,7 @@ async function runStrategy(url: string, strategy: 'mobile' | 'desktop', apiKey: 
   const params = new URLSearchParams({ url, strategy });
   if (apiKey) params.set('key', apiKey);
 
-  const res = await fetch(`${PSI_URL}?${params}`);
+  const res = await fetch(`${PSI_URL}?${params}`, { signal: AbortSignal.timeout(60_000) });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`PSI API error ${res.status}: ${body.slice(0, 200)}`);
