@@ -71,6 +71,13 @@ class QueueStateNode {
     return this.state.get(urlId)?.status === 'cancelled';
   }
 
+  clearAll(): number {
+    const ids = [...this.state.keys()];
+    this.state.clear();
+    if (ids.length > 0) this.broadcast({ type: 'purge', urlIds: ids });
+    return ids.length;
+  }
+
   getSnapshot(): QueueEntry[] {
     return [...this.state.values()];
   }

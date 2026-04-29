@@ -106,6 +106,16 @@ export class QueueStateDO extends DurableObject {
     return [...this.state.values()];
   }
 
+  async clearAll(): Promise<number> {
+    await this.ensureLoaded();
+    const ids = [...this.state.keys()];
+    if (ids.length === 0) return 0;
+    await this.ctx.storage.delete(ids.map((id) => `status:${id}`));
+    this.state.clear();
+    this.broadcast({ type: 'purge', urlIds: ids });
+    return ids.length;
+  }
+
   async fetch(req: Request): Promise<Response> {
     if (req.headers.get('Upgrade') !== 'websocket') {
       const entries = await this.getSnapshot();

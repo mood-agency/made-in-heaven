@@ -70,6 +70,11 @@ nodeServer.post('/api/queue/cancel', async (c) => {
   return c.json({ cancelled });
 });
 
+nodeServer.post('/api/queue/clear', (c) => {
+  const cleared = queueStateNode.clearAll();
+  return c.json({ cleared });
+});
+
 async function main() {
   await initScheduler(db, apiKey);
   const server = serve({ fetch: nodeServer.fetch, port });

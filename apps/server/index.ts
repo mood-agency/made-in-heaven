@@ -69,6 +69,12 @@ worker.post('/api/queue/cancel', async (c) => {
   return c.json({ cancelled });
 });
 
+worker.post('/api/queue/clear', async (c) => {
+  const stub = getQueueStateStub(c.env);
+  const cleared = await stub.clearAll();
+  return c.json({ cleared });
+});
+
 // Serve the React SPA for all non-API routes
 worker.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
