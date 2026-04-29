@@ -106,6 +106,8 @@ export function useDeleteUrl() {
   });
 }
 
+const analyzePolls = new Map<number, ReturnType<typeof setInterval>>();
+
 export function useAnalyze() {
   const qc = useQueryClient();
   return useMutation({
@@ -114,7 +116,10 @@ export function useAnalyze() {
       return res.json() as Promise<{ message: string }>;
     },
     onSuccess: (_data, id) => {
-      // Poll every 5s for up to 90s waiting for the queue consumer to finish
+      // Cancel any existing poll for this URL before starting a new one
+      const existing = analyzePolls.get(id);
+      if (existing) clearInterval(existing);
+
       const prevAnalyzed = (qc.getQueryData<Url[]>(['urls']) ?? [])
         .find((u) => u.id === id)?.lastAnalyzed ?? null;
       let attempts = 0;
@@ -124,8 +129,10 @@ export function useAnalyze() {
         const updated = (qc.getQueryData<Url[]>(['urls']) ?? []).find((u) => u.id === id);
         if (updated?.lastAnalyzed !== prevAnalyzed || ++attempts >= 18) {
           clearInterval(poll);
+          analyzePolls.delete(id);
         }
       }, 5000);
+      analyzePolls.set(id, poll);
     },
   });
 }

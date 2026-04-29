@@ -29,7 +29,11 @@ worker.use('*', async (c, next) => {
     await c.env.ANALYSIS_QUEUE.send({ urlId, urlStr });
   });
   c.set('enqueueBatchAnalysis', async (items) => {
-    await c.env.ANALYSIS_QUEUE.sendBatch(items.map((item) => ({ body: item })));
+    const messages = items.map((item) => ({ body: item }));
+    const BATCH_LIMIT = 100;
+    for (let i = 0; i < messages.length; i += BATCH_LIMIT) {
+      await c.env.ANALYSIS_QUEUE.sendBatch(messages.slice(i, i + BATCH_LIMIT));
+    }
   });
   await next();
 });
@@ -55,9 +59,11 @@ export default {
       .from(urls)
       .where(and(eq(urls.isActive, true), eq(urls.scheduleInterval, interval)));
 
-    await env.ANALYSIS_QUEUE.sendBatch(
-      targetUrls.map((u) => ({ body: { urlId: u.id, urlStr: u.url } })),
-    );
+    const messages = targetUrls.map((u) => ({ body: { urlId: u.id, urlStr: u.url } }));
+    const BATCH_LIMIT = 100;
+    for (let i = 0; i < messages.length; i += BATCH_LIMIT) {
+      await env.ANALYSIS_QUEUE.sendBatch(messages.slice(i, i + BATCH_LIMIT));
+    }
     console.log(`[scheduler] ${interval}: enqueued ${targetUrls.length} URLs`);
   },
 
