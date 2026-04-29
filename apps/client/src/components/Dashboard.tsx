@@ -22,7 +22,6 @@ import ScoreCircle from '@/components/ScoreCircle';
 import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
 import UrlTable from '@/components/UrlTable';
-import QueuePanel from '@/components/QueuePanel';
 import { arrayMove } from '@dnd-kit/sortable';
 import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
@@ -321,8 +320,6 @@ export default function Dashboard() {
           <AddUrlDialog />
         </div>
       </div>
-
-      <QueuePanel queueState={queueState} urls={urls ?? []} />
 
       {/* URL search */}
       <div className="relative max-w-sm">

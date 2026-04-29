@@ -11,6 +11,8 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { LayoutDashboard, Settings } from 'lucide-react';
+import QueueDrawer from '@/components/QueueDrawer';
+import { useQueueState, useUrls } from '@/api';
 
 const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
@@ -46,6 +48,12 @@ function AppSidebar() {
   );
 }
 
+function QueueDrawerContainer() {
+  const queueState = useQueueState();
+  const { data: urls } = useUrls();
+  return <QueueDrawer queueState={queueState} urls={urls ?? []} />;
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
@@ -56,6 +64,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </header>
         <div className="flex-1 p-6">{children}</div>
       </main>
+      <QueueDrawerContainer />
     </SidebarProvider>
   );
 }
