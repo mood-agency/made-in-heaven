@@ -50,7 +50,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
     return (
       <button
         onClick={() => { setMinimized(false); setOpen(true); }}
-        className="fixed bottom-0 right-6 z-50 flex items-center gap-2 rounded-t-xl bg-card border border-b-0 shadow-2xl px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
+        className="fixed bottom-0 right-6 z-50 flex items-center gap-2 rounded-t-xl bg-card border border-b-0 shadow-2xl px-4 py-3 text-sm cursor-pointer"
       >
         {running > 0 ? (
           <Loader2 className="size-4 animate-spin text-blue-500 shrink-0" />
