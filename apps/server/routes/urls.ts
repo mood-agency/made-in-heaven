@@ -77,9 +77,12 @@ function urlsCacheKey(rawUrl: string): Request {
   return new Request(u.toString());
 }
 
-async function invalidateUrlsCache(rawUrl: string, ctx: ExecutionContext | undefined): Promise<void> {
+type ExecCtx = { waitUntil(p: Promise<unknown>): void };
+type CfCacheStorage = { default: Cache };
+
+async function invalidateUrlsCache(rawUrl: string, ctx: ExecCtx | undefined): Promise<void> {
   if (typeof caches === 'undefined') return;
-  ctx?.waitUntil(caches.default.delete(urlsCacheKey(rawUrl)));
+  ctx?.waitUntil((caches as unknown as CfCacheStorage).default.delete(urlsCacheKey(rawUrl)));
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -112,7 +115,7 @@ async function getTagsForUrls(db: Db, urlIds: number[]): Promise<Record<number, 
 const router = new Hono<{ Variables: Variables }>()
   .get('/', async (c) => {
     if (typeof caches !== 'undefined') {
-      const cached = await caches.default.match(urlsCacheKey(c.req.url));
+      const cached = await (caches as unknown as CfCacheStorage).default.match(urlsCacheKey(c.req.url));
       if (cached) return cached;
     }
 
@@ -162,7 +165,7 @@ const router = new Hono<{ Variables: Variables }>()
     });
 
     if (typeof caches !== 'undefined') {
-      c.executionCtx?.waitUntil(caches.default.put(urlsCacheKey(c.req.url), response.clone()));
+      c.executionCtx?.waitUntil((caches as unknown as CfCacheStorage).default.put(urlsCacheKey(c.req.url), response.clone()));
     }
 
     return response;

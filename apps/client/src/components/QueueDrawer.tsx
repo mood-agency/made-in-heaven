@@ -176,7 +176,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                       <span className="relative shrink-0 w-12 flex items-center justify-end">
                         <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity">En cola</span>
                         <button
-                          onClick={() => cancelQueue.mutate([entry.urlId])}
+                          onClick={() => cancelQueue.mutate({ urlIds: [entry.urlId] })}
                           className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                           title="Cancelar"
                         >
