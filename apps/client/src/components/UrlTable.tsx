@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { Url } from '@/api';
+import type { Url, QueueEntry } from '@/api';
 import {
   Table,
   TableBody,
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import ScoreCircle from '@/components/ScoreCircle';
-import { RefreshCw, Trash2, ExternalLink, GripVertical } from 'lucide-react';
+import { RefreshCw, Trash2, ExternalLink, GripVertical, Loader2 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -43,6 +43,32 @@ function timeAgo(date: string | null) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function QueueStatusBadge({ entry }: { entry: QueueEntry | undefined }) {
+  if (!entry) return null;
+  if (entry.status === 'queued')
+    return <Badge variant="secondary" className="text-xs shrink-0">En cola</Badge>;
+  if (entry.status === 'running')
+    return (
+      <Badge variant="secondary" className="text-xs shrink-0 gap-1 text-blue-600 border-blue-200 bg-blue-50">
+        <Loader2 className="size-3 animate-spin" />
+        Analizando…
+      </Badge>
+    );
+  if (entry.status === 'failed')
+    return (
+      <Badge
+        variant="destructive"
+        className="text-xs shrink-0 cursor-help"
+        title={entry.error ?? 'Error desconocido'}
+      >
+        Error
+      </Badge>
+    );
+  if (entry.status === 'done')
+    return <Badge variant="outline" className="text-xs shrink-0 text-green-600 border-green-200">Listo</Badge>;
+  return null;
+}
+
 interface RowProps {
   url: Url;
   sortMode: SortMode;
@@ -53,6 +79,7 @@ interface RowProps {
   isAnalyzePending: boolean;
   isSelected: boolean;
   onToggleSelect: (id: number) => void;
+  queueEntry: QueueEntry | undefined;
 }
 
 function SortableRow({
@@ -65,6 +92,7 @@ function SortableRow({
   isAnalyzePending,
   isSelected,
   onToggleSelect,
+  queueEntry,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: u.id,
@@ -160,7 +188,11 @@ function SortableRow({
       </TableCell>
 
       <TableCell className="hidden sm:table-cell text-xs text-muted-foreground whitespace-nowrap">
-        {timeAgo(u.lastAnalyzed)}
+        <div className="flex flex-col gap-1">
+          <QueueStatusBadge entry={queueEntry} />
+          {!queueEntry && timeAgo(u.lastAnalyzed)}
+          {queueEntry && queueEntry.status === 'done' && timeAgo(u.lastAnalyzed)}
+        </div>
       </TableCell>
 
       <TableCell className="text-right">
@@ -169,10 +201,14 @@ function SortableRow({
             variant="ghost"
             size="sm"
             onClick={() => onAnalyze(u.id)}
-            disabled={isAnalyzePending}
+            disabled={isAnalyzePending || queueEntry?.status === 'queued' || queueEntry?.status === 'running'}
             title="Analizar"
           >
-            <RefreshCw className="size-3.5" />
+            {queueEntry?.status === 'running' ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => onDelete(u.id, displayName)} title="Eliminar">
             <Trash2 className="size-3.5 text-destructive" />
@@ -195,6 +231,7 @@ interface Props {
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
   onToggleSelectAll: () => void;
+  queueState: Map<number, QueueEntry>;
 }
 
 export default function UrlTable({
@@ -209,6 +246,7 @@ export default function UrlTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
+  queueState,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -265,6 +303,7 @@ export default function UrlTable({
                   isAnalyzePending={isAnalyzePending}
                   isSelected={selectedIds.has(u.id)}
                   onToggleSelect={onToggleSelect}
+                  queueEntry={queueState.get(u.id)}
                 />
               ))}
             </TableBody>

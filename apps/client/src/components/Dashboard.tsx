@@ -8,6 +8,7 @@ import {
   useAnalyzeSelected,
   useDeleteUrl,
   useUpdateUrl,
+  useQueueState,
   downloadScoresCsv,
   type Url,
 } from '@/api';
@@ -21,13 +22,14 @@ import ScoreCircle from '@/components/ScoreCircle';
 import AddUrlDialog from '@/components/AddUrlDialog';
 import BulkImportDialog from '@/components/BulkImportDialog';
 import UrlTable from '@/components/UrlTable';
+import QueuePanel from '@/components/QueuePanel';
 import { arrayMove } from '@dnd-kit/sortable';
-import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw, Trash2, ExternalLink, X, LayoutGrid, Table2, Play, Download, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 type ViewMode = 'grid' | 'table';
 type SortMode = 'manual' | 'alpha' | 'url' | 'mobile' | 'desktop';
 
-function timeAgo(date: string | null) {
+function timeAgo(date: string | null): string {
   if (!date) return 'Never';
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
@@ -45,6 +47,7 @@ export default function Dashboard() {
   const analyzeSelected = useAnalyzeSelected();
   const deleteUrl = useDeleteUrl();
   const updateUrl = useUpdateUrl();
+  const queueState = useQueueState();
 
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(
@@ -319,6 +322,8 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <QueuePanel queueState={queueState} urls={urls ?? []} />
+
       {/* URL search */}
       <div className="relative max-w-sm">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
@@ -449,6 +454,7 @@ export default function Dashboard() {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
+          queueState={queueState}
         />
       )}
 
@@ -510,9 +516,24 @@ export default function Dashboard() {
                     <ScoreCircle score={u.latestDesktop?.performanceScore ?? null} label="Desktop" />
                   </div>
 
-                  <p className="text-xs text-muted-foreground text-center">
-                    Last analyzed: {timeAgo(u.lastAnalyzed)}
-                  </p>
+                  <div className="flex flex-col items-center gap-1">
+                    {queueState.get(u.id) && (
+                      <span className={`text-xs font-medium ${
+                        queueState.get(u.id)?.status === 'running' ? 'text-blue-600' :
+                        queueState.get(u.id)?.status === 'failed' ? 'text-destructive' :
+                        queueState.get(u.id)?.status === 'done' ? 'text-green-600' :
+                        'text-muted-foreground'
+                      }`}>
+                        {queueState.get(u.id)?.status === 'queued' && 'En cola'}
+                        {queueState.get(u.id)?.status === 'running' && '⏳ Analizando…'}
+                        {queueState.get(u.id)?.status === 'done' && '✓ Listo'}
+                        {queueState.get(u.id)?.status === 'failed' && '✗ Error'}
+                      </span>
+                    )}
+                    <p className="text-xs text-muted-foreground text-center">
+                      Last analyzed: {timeAgo(u.lastAnalyzed)}
+                    </p>
+                  </div>
 
                   <div className="flex gap-2 mt-auto">
                     <Button
@@ -520,9 +541,13 @@ export default function Dashboard() {
                       size="sm"
                       className="flex-1"
                       onClick={() => handleAnalyze(u.id)}
-                      disabled={analyze.isPending}
+                      disabled={analyze.isPending || queueState.get(u.id)?.status === 'queued' || queueState.get(u.id)?.status === 'running'}
                     >
-                      <RefreshCw className="size-3.5" data-icon="inline-start" />
+                      {queueState.get(u.id)?.status === 'running' ? (
+                        <Loader2 className="size-3.5 animate-spin" data-icon="inline-start" />
+                      ) : (
+                        <RefreshCw className="size-3.5" data-icon="inline-start" />
+                      )}
                       Analyze
                     </Button>
                     <Button variant="outline" size="sm" className="flex-1" asChild>

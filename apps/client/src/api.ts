@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '@/lib/rpc';
+import { subscribeToQueueWs, type QueueEntry } from '@/lib/queue-ws';
+export type { QueueEntry } from '@/lib/queue-ws';
 
 export type ScheduleInterval = 'manual' | 'daily';
 
@@ -70,7 +73,6 @@ export function useUrls() {
       const res = await throwIfError(await rpc.api.urls.$get());
       return res.json() as Promise<Url[]>;
     },
-    refetchInterval: 30 * 1000,
   });
 }
 
@@ -106,33 +108,11 @@ export function useDeleteUrl() {
   });
 }
 
-const analyzePolls = new Map<number, ReturnType<typeof setInterval>>();
-
 export function useAnalyze() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
       const res = await throwIfError(await rpc.api.urls[':id'].analyze.$post({ param: { id: String(id) } }));
       return res.json() as Promise<{ message: string }>;
-    },
-    onSuccess: (_data, id) => {
-      // Cancel any existing poll for this URL before starting a new one
-      const existing = analyzePolls.get(id);
-      if (existing) clearInterval(existing);
-
-      const prevAnalyzed = (qc.getQueryData<Url[]>(['urls']) ?? [])
-        .find((u) => u.id === id)?.lastAnalyzed ?? null;
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        await qc.invalidateQueries({ queryKey: ['urls'] });
-        await qc.invalidateQueries({ queryKey: ['analyses', id] });
-        const updated = (qc.getQueryData<Url[]>(['urls']) ?? []).find((u) => u.id === id);
-        if (updated?.lastAnalyzed !== prevAnalyzed || ++attempts >= 18) {
-          clearInterval(poll);
-          analyzePolls.delete(id);
-        }
-      }, 5000);
-      analyzePolls.set(id, poll);
     },
   });
 }
@@ -143,7 +123,6 @@ export function useAnalyzeAll() {
       const res = await throwIfError(await rpc.api.urls['analyze-all'].$post());
       return res.json() as Promise<{ queued?: number; started?: number }>;
     },
-    // No manual invalidation needed — useUrls polls every 30s automatically
   });
 }
 
@@ -156,6 +135,45 @@ export function useAnalyzeSelected() {
       return res.json() as Promise<{ queued?: number; started?: number }>;
     },
   });
+}
+
+export function useQueueState(): Map<number, QueueEntry> {
+  const qc = useQueryClient();
+  const [state, setState] = useState<Map<number, QueueEntry>>(new Map());
+
+  useEffect(() => {
+    return subscribeToQueueWs((msg) => {
+      if (msg.type === 'snapshot') {
+        const map = new Map<number, QueueEntry>();
+        for (const e of msg.entries) map.set(e.urlId, e);
+        setState(map);
+      } else if (msg.type === 'update') {
+        setState((prev) => {
+          const next = new Map(prev);
+          next.set(msg.entry.urlId, msg.entry);
+          return next;
+        });
+        if (msg.entry.status === 'done' || msg.entry.status === 'failed') {
+          void qc.invalidateQueries({ queryKey: ['urls'] });
+          void qc.invalidateQueries({ queryKey: ['analyses', msg.entry.urlId] });
+        }
+      } else if (msg.type === 'bulk_update') {
+        setState((prev) => {
+          const next = new Map(prev);
+          for (const e of msg.entries) next.set(e.urlId, e);
+          return next;
+        });
+      } else if (msg.type === 'purge') {
+        setState((prev) => {
+          const next = new Map(prev);
+          for (const id of msg.urlIds) next.delete(id);
+          return next;
+        });
+      }
+    });
+  }, [qc]);
+
+  return state;
 }
 
 export async function downloadScoresCsv(ids?: number[]): Promise<void> {
