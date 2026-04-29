@@ -23,10 +23,11 @@ interface Props {
 export default function QueueDrawer({ queueState, urls }: Props) {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
-  const entries = [...queueState.values()].sort(
-    (a, b) => statusOrder(a.status) - statusOrder(b.status),
-  );
+  const entries = [...queueState.values()]
+    .filter((e) => !(e.status === 'done' && dismissed.has(e.urlId)))
+    .sort((a, b) => statusOrder(a.status) - statusOrder(b.status));
   const urlMap = new Map(urls.map((u) => [u.id, u]));
 
   const running = entries.filter((e) => e.status === 'running').length;
@@ -134,7 +135,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                 const href = url?.url;
 
                 return (
-                  <div key={entry.urlId} className="flex items-center gap-3 px-4 py-3">
+                  <div key={entry.urlId} className="group flex items-center gap-3 px-4 py-3">
                     {entry.status === 'running' && <Loader2 className="size-4 shrink-0 animate-spin text-blue-500" />}
                     {entry.status === 'queued' && <Clock className="size-4 shrink-0 text-muted-foreground" />}
                     {entry.status === 'done' && <CheckCircle2 className="size-4 shrink-0 text-green-500" />}
@@ -145,26 +146,37 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                       {href && <span className="text-xs text-muted-foreground truncate">{href}</span>}
                     </div>
 
-                    <span className={cn('text-xs shrink-0', {
-                      'text-blue-600': entry.status === 'running',
-                      'text-green-600': entry.status === 'done',
-                      'text-destructive': entry.status === 'failed',
-                      'text-muted-foreground': entry.status === 'queued',
-                    })}>
-                      {entry.status === 'running' && 'Analizando…'}
-                      {entry.status === 'queued' && 'En cola'}
-                      {entry.status === 'done' && 'Listo'}
-                      {entry.status === 'failed' && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">Error</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="left">
-                            <p className="max-w-xs break-words">{entry.error ?? 'Error desconocido'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </span>
+                    {entry.status === 'done' ? (
+                      <span className="relative shrink-0 w-8 flex items-center justify-end">
+                        <span className="text-xs text-green-600 group-hover:opacity-0 transition-opacity">Listo</span>
+                        <button
+                          onClick={() => setDismissed((prev) => new Set([...prev, entry.urlId]))}
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                          title="Descartar"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
+                    ) : (
+                      <span className={cn('text-xs shrink-0', {
+                        'text-blue-600': entry.status === 'running',
+                        'text-destructive': entry.status === 'failed',
+                        'text-muted-foreground': entry.status === 'queued',
+                      })}>
+                        {entry.status === 'running' && 'Analizando…'}
+                        {entry.status === 'queued' && 'En cola'}
+                        {entry.status === 'failed' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help underline decoration-dotted">Error</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              <p className="max-w-xs break-words">{entry.error ?? 'Error desconocido'}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
+                    )}
                   </div>
                 );
               })}
