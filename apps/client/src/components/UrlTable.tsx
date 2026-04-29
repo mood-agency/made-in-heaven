@@ -98,7 +98,7 @@ function SortableRow({
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: u.id,
-    disabled: sortMode !== 'manual',
+    disabled: sortMode !== 'manual' || !!activeTag,
   });
 
   const style = {
@@ -110,7 +110,7 @@ function SortableRow({
   };
 
   const displayName = u.name ?? new URL(u.url).hostname;
-  const isManual = sortMode === 'manual';
+  const isManual = sortMode === 'manual' && !activeTag;
 
   return (
     <TableRow ref={setNodeRef} style={style} className={isDragging ? 'bg-accent shadow-md' : undefined}>
