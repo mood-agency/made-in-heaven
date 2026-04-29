@@ -55,6 +55,7 @@ export class QueueStateDO extends DurableObject {
 
   async markDone(urlId: number): Promise<void> {
     await this.ensureLoaded();
+    if (this.state.get(urlId)?.status === 'cancelled') return;
     const entry: QueueEntry = { urlId, status: 'done', updatedAt: Date.now() };
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
@@ -64,6 +65,7 @@ export class QueueStateDO extends DurableObject {
 
   async markFailed(urlId: number, error: string): Promise<void> {
     await this.ensureLoaded();
+    if (this.state.get(urlId)?.status === 'cancelled') return;
     const entry: QueueEntry = { urlId, status: 'failed', updatedAt: Date.now(), error };
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
@@ -71,13 +73,13 @@ export class QueueStateDO extends DurableObject {
     await this.scheduleAlarm(TERMINAL_TTL);
   }
 
-  async cancelQueued(urlIds?: number[]): Promise<number> {
+  async cancelQueued(urlIds?: number[], includeRunning = false): Promise<number> {
     await this.ensureLoaded();
     const now = Date.now();
     const toCancel: QueueEntry[] = [];
 
     for (const [, entry] of this.state) {
-      if (entry.status !== 'queued') continue;
+      if (entry.status !== 'queued' && !(includeRunning && entry.status === 'running')) continue;
       if (urlIds && !urlIds.includes(entry.urlId)) continue;
       toCancel.push(entry);
     }

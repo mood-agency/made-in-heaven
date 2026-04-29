@@ -47,6 +47,7 @@ class QueueStateNode {
   }
 
   markDone(urlId: number) {
+    if (this.state.get(urlId)?.status === 'cancelled') return;
     const entry: QueueEntry = { urlId, status: 'done', updatedAt: Date.now() };
     this.state.set(urlId, entry);
     this.broadcast({ type: 'update', entry });
@@ -54,17 +55,18 @@ class QueueStateNode {
   }
 
   markFailed(urlId: number, error: string) {
+    if (this.state.get(urlId)?.status === 'cancelled') return;
     const entry: QueueEntry = { urlId, status: 'failed', updatedAt: Date.now(), error };
     this.state.set(urlId, entry);
     this.broadcast({ type: 'update', entry });
     this.scheduleCleanup();
   }
 
-  cancelQueued(urlIds?: number[]): number {
+  cancelQueued(urlIds?: number[], includeRunning = false): number {
     const now = Date.now();
     const updated: QueueEntry[] = [];
     for (const [, entry] of this.state) {
-      if (entry.status !== 'queued') continue;
+      if (entry.status !== 'queued' && !(includeRunning && entry.status === 'running')) continue;
       if (urlIds && !urlIds.includes(entry.urlId)) continue;
       const cancelled: QueueEntry = { urlId: entry.urlId, status: 'cancelled', updatedAt: now };
       this.state.set(entry.urlId, cancelled);

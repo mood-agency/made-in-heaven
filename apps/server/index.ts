@@ -64,8 +64,8 @@ worker.get('/api/queue/state', async (c) => {
 
 worker.post('/api/queue/cancel', async (c) => {
   const stub = getQueueStateStub(c.env);
-  const body: { urlIds?: number[] } = await c.req.json().catch(() => ({}));
-  const cancelled = await stub.cancelQueued(body.urlIds);
+  const body: { urlIds?: number[]; includeRunning?: boolean } = await c.req.json().catch(() => ({}));
+  const cancelled = await stub.cancelQueued(body.urlIds, body.includeRunning);
   return c.json({ cancelled });
 });
 

@@ -109,14 +109,14 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                 </DrawerTitle>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {queued > 0 && (
+                {(queued > 0 || running > 0) && (
                   <button
-                    onClick={() => cancelQueue.mutate(undefined)}
+                    onClick={() => cancelQueue.mutate({ includeRunning: true })}
                     disabled={cancelQueue.isPending}
-                    className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
-                    title="Cancelar todo"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"
                   >
-                    <Ban className="size-4" />
+                    <Ban className="size-3.5" />
+                    Cancelar todo
                   </button>
                 )}
                 <button
@@ -196,10 +196,20 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                       </span>
                     ) : (
                       <span className={cn('text-xs shrink-0', {
-                        'text-blue-600': entry.status === 'running',
                         'text-destructive': entry.status === 'failed',
                       })}>
-                        {entry.status === 'running' && 'Analizando…'}
+                        {entry.status === 'running' && (
+                          <span className="relative shrink-0 w-16 flex items-center justify-end">
+                            <span className="text-xs text-blue-600 group-hover:opacity-0 transition-opacity">Analizando…</span>
+                            <button
+                              onClick={() => cancelQueue.mutate({ urlIds: [entry.urlId], includeRunning: true })}
+                              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                              title="Cancelar"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </span>
+                        )}
                         {entry.status === 'failed' && (
                           <Tooltip>
                             <TooltipTrigger asChild>

@@ -139,12 +139,12 @@ export function useAnalyzeSelected() {
 
 export function useCancelQueue() {
   return useMutation({
-    mutationFn: async (urlIds?: number[]) => {
+    mutationFn: async (opts?: { urlIds?: number[]; includeRunning?: boolean }) => {
       const res = await throwIfError(
         await fetch('/api/queue/cancel', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urlIds }),
+          body: JSON.stringify(opts ?? {}),
         }),
       );
       return res.json() as Promise<{ cancelled: number }>;

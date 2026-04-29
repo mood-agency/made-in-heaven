@@ -65,8 +65,8 @@ nodeServer.route('/', app);
 nodeServer.get('/api/queue/state', (c) => c.json(queueStateNode.getSnapshot()));
 
 nodeServer.post('/api/queue/cancel', async (c) => {
-  const body: { urlIds?: number[] } = await c.req.json().catch(() => ({}));
-  const cancelled = queueStateNode.cancelQueued(body.urlIds);
+  const body: { urlIds?: number[]; includeRunning?: boolean } = await c.req.json().catch(() => ({}));
+  const cancelled = queueStateNode.cancelQueued(body.urlIds, body.includeRunning);
   return c.json({ cancelled });
 });
 
