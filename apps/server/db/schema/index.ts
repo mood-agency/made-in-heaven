@@ -10,6 +10,10 @@ export const urls = sqliteTable('urls', {
   displayOrder: integer('display_order'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   lastAnalyzed: integer('last_analyzed', { mode: 'timestamp' }),
+  metaTitle: text('meta_title'),
+  metaDescription: text('meta_description'),
+  metaImage: text('meta_image'),
+  metaFetchedAt: integer('meta_fetched_at', { mode: 'timestamp' }),
 });
 
 export const analyses = sqliteTable('analyses', {

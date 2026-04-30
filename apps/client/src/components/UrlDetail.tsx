@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, useTags, type ScheduleInterval } from '@/api';
+import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, useTags, useRefreshMetadata, type ScheduleInterval } from '@/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -114,6 +114,47 @@ function StrategyCard({ strategy, latest }: { strategy: string; latest: Analysis
   );
 }
 
+function MetaPreview({
+  image,
+  title,
+  description,
+  onRefresh,
+  refreshing,
+}: {
+  image: string | null;
+  title: string | null;
+  description: string | null;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-4 p-4 rounded-lg border bg-muted/30 relative">
+      {image && (
+        <img
+          src={image}
+          alt=""
+          className="size-20 rounded object-cover shrink-0 bg-muted"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+        />
+      )}
+      <div className="flex-1 min-w-0">
+        {title && <p className="text-sm font-medium truncate">{title}</p>}
+        {description && (
+          <p className="text-sm text-muted-foreground mt-0.5 line-clamp-3">{description}</p>
+        )}
+      </div>
+      <button
+        onClick={onRefresh}
+        disabled={refreshing}
+        title="Refresh preview image. Title and description update with each analysis."
+        className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
+      >
+        <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+      </button>
+    </div>
+  );
+}
+
 export default function UrlDetail() {
   const { id } = useParams<{ id: string }>();
   const urlId = Number(id);
@@ -126,6 +167,7 @@ export default function UrlDetail() {
   const desktopQ = { ...analysesQ, data: analysesQ.data?.filter((a) => a.strategy === 'desktop') };
   const analyze = useAnalyze();
   const updateUrl = useUpdateUrl();
+  const refreshMeta = useRefreshMetadata();
   const { data: existingTags = [] } = useTags();
 
   const [editingTags, setEditingTags] = useState(false);
@@ -199,6 +241,15 @@ export default function UrlDetail() {
       await updateUrl.mutateAsync({ id: urlId, tags: finalTags });
       toast.success('Tags updated');
       setEditingTags(false);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
+  async function handleRefreshMeta() {
+    try {
+      await refreshMeta.mutateAsync(urlId);
+      toast.success('Preview image updated');
     } catch (err) {
       toast.error(String(err));
     }
@@ -375,6 +426,16 @@ export default function UrlDetail() {
           {analyze.isPending ? 'Analyzing…' : 'Analyze now'}
         </Button>
       </div>
+
+      {(urlData.metaImage || urlData.metaTitle || urlData.metaDescription) && (
+        <MetaPreview
+          image={urlData.metaImage}
+          title={urlData.metaTitle}
+          description={urlData.metaDescription}
+          onRefresh={handleRefreshMeta}
+          refreshing={refreshMeta.isPending}
+        />
+      )}
 
       <div className="flex gap-4 flex-wrap">
         <StrategyCard strategy="mobile" latest={mobile[0]} />

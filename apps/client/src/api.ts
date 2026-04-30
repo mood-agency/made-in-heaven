@@ -15,6 +15,10 @@ export interface Url {
   displayOrder: number | null;
   createdAt: string | null;
   lastAnalyzed: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  metaImage: string | null;
+  metaFetchedAt: string | null;
   tags: string[];
   latestMobile: Analysis | null;
   latestDesktop: Analysis | null;
@@ -116,6 +120,19 @@ export function useAnalyze() {
       const res = await throwIfError(await rpc.api.urls[':id'].analyze.$post({ param: { id: String(id) } }));
       return res.json() as Promise<{ message: string }>;
     },
+  });
+}
+
+export function useRefreshMetadata() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await throwIfError(
+        await rpc.api.urls[':id']['refresh-metadata'].$post({ param: { id: String(id) } }),
+      );
+      return res.json() as Promise<Url>;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['urls'] }),
   });
 }
 

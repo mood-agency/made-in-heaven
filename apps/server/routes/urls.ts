@@ -5,6 +5,7 @@ import type { Variables, Db } from '../types.js';
 import { urls, analyses, tags, urlTags } from '../db/schema/index.js';
 import { eq, desc, inArray, and } from 'drizzle-orm';
 import { analyzeUrl } from '../services/pagespeed.js';
+import { fetchOgImage } from '../services/og-image.js';
 
 const scheduleEnum = z.enum(['manual', 'daily']);
 
@@ -64,6 +65,11 @@ function extractDomainTag(urlStr: string): string {
   } catch {
     return '';
   }
+}
+
+async function refreshOgImage(db: Db, urlId: number, urlStr: string): Promise<void> {
+  const image = await fetchOgImage(urlStr);
+  await db.update(urls).set({ metaImage: image, metaFetchedAt: new Date() }).where(eq(urls.id, urlId));
 }
 
 // D1 SQLite limit is ~100 bound variables per query
@@ -204,6 +210,12 @@ const router = new Hono<{ Variables: Variables }>()
     if (data.scheduleInterval !== 'manual') {
       c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
     }
+    const ogFetch = refreshOgImage(db, result.id, result.url);
+    if (c.executionCtx) {
+      c.executionCtx.waitUntil(ogFetch);
+    } else {
+      ogFetch.catch(() => {});
+    }
     await invalidateUrlsCache(c.req.url, c.executionCtx);
     return c.json({ ...result, tags: allTags }, 201);
   })
@@ -230,6 +242,12 @@ const router = new Hono<{ Variables: Variables }>()
         await setUrlTags(db, result.id, allTags);
         if (data.scheduleInterval !== 'manual') {
           c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
+        }
+        const ogFetch = refreshOgImage(db, result.id, result.url);
+        if (c.executionCtx) {
+          c.executionCtx.waitUntil(ogFetch);
+        } else {
+          ogFetch.catch(() => {});
         }
         created.push({ ...result, tags: allTags });
       } catch (err) {
@@ -327,6 +345,17 @@ const router = new Hono<{ Variables: Variables }>()
     await db.delete(urls).where(eq(urls.id, id));
     await invalidateUrlsCache(c.req.url, c.executionCtx);
     return c.body(null, 204);
+  })
+  .post('/:id/refresh-metadata', async (c) => {
+    const db = c.var.db;
+    const id = Number(c.req.param('id'));
+    const [url] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
+    if (!url) return c.json({ message: 'Not found' }, 404);
+    await refreshOgImage(db, id, url.url);
+    const [updated] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
+    const currentTags = (await getTagsForUrls(db, [id]))[id] ?? [];
+    await invalidateUrlsCache(c.req.url, c.executionCtx);
+    return c.json({ ...updated, tags: currentTags });
   })
   .post('/:id/analyze', async (c) => {
     const db = c.var.db;
