@@ -314,7 +314,8 @@ export default function Dashboard() {
             onClick={async () => {
               try {
                 const isFiltered = activeTag !== null || searchQuery.trim() !== '' || activeDate !== undefined;
-                await downloadScoresCsv(isFiltered ? searched.map((u) => u.id) : undefined, activeDateStr);
+                const csvDate = activeDateStr ?? new Date().toLocaleDateString('en-CA');
+                await downloadScoresCsv(isFiltered ? searched.map((u) => u.id) : undefined, csvDate);
               } catch (err) {
                 toast.error(String(err));
               }
@@ -433,7 +434,8 @@ export default function Dashboard() {
             variant="outline"
             onClick={async () => {
               try {
-                await downloadScoresCsv([...selectedIds]);
+                const csvDate = activeDateStr ?? new Date().toLocaleDateString('en-CA');
+                await downloadScoresCsv([...selectedIds], csvDate);
               } catch (err) {
                 toast.error(String(err));
               }
