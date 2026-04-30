@@ -5,7 +5,7 @@
     "dev": "turbo run dev",
     "dev:worker": "turbo run dev:worker",
     "build": "turbo run build",
-    "deploy": "turbo run deploy --filter=@mih/server",
+    "deploy": "turbo run deploy",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:migrate:local": "turbo run db:migrate:local",
