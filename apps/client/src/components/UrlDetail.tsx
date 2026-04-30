@@ -127,8 +127,9 @@ function MetaPreview({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  const isEmpty = !image && !title && !description;
   return (
-    <div className="flex items-start gap-4 p-4 rounded-lg border bg-muted/30 relative">
+    <div className="flex items-start gap-4 p-4 rounded-lg border bg-muted/30">
       {image && (
         <img
           src={image}
@@ -141,6 +142,9 @@ function MetaPreview({
         {title && <p className="text-sm font-medium truncate">{title}</p>}
         {description && (
           <p className="text-sm text-muted-foreground mt-0.5 line-clamp-3">{description}</p>
+        )}
+        {isEmpty && (
+          <p className="text-sm text-muted-foreground">No preview yet — click refresh or run an analysis.</p>
         )}
       </div>
       <button
@@ -427,15 +431,13 @@ export default function UrlDetail() {
         </Button>
       </div>
 
-      {(urlData.metaImage || urlData.metaTitle || urlData.metaDescription) && (
-        <MetaPreview
-          image={urlData.metaImage}
-          title={urlData.metaTitle}
-          description={urlData.metaDescription}
-          onRefresh={handleRefreshMeta}
-          refreshing={refreshMeta.isPending}
-        />
-      )}
+      <MetaPreview
+        image={urlData.metaImage}
+        title={urlData.metaTitle}
+        description={urlData.metaDescription}
+        onRefresh={handleRefreshMeta}
+        refreshing={refreshMeta.isPending}
+      />
 
       <div className="flex gap-4 flex-wrap">
         <StrategyCard strategy="mobile" latest={mobile[0]} />
