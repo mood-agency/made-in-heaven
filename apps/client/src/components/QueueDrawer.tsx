@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
 import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,12 +39,15 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const cancelled = entries.filter((e) => e.status === 'cancelled').length;
   const total = entries.length;
 
+  const prevSizeRef = useRef(0);
   useEffect(() => {
-    if (queueState.size > 0) {
+    const size = queueState.size;
+    if (size > 0 && size > prevSizeRef.current) {
       setOpen(true);
       setMinimized(false);
     }
-  }, [queueState.size > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+    prevSizeRef.current = size;
+  }, [queueState.size]);
 
   if (total === 0 && !open) return null;
 
