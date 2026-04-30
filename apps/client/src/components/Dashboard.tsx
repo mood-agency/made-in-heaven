@@ -408,7 +408,7 @@ export default function Dashboard() {
           </Popover>
           {activeDate && (
             <button
-              onClick={() => setActiveDate(undefined)}
+              onClick={() => setActiveDate(new Date())}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
               <X className="size-3" /> Clear
