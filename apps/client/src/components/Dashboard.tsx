@@ -42,7 +42,7 @@ function timeAgo(date: string | null): string {
 }
 
 export default function Dashboard() {
-  const [activeDate, setActiveDate] = useState<Date | undefined>(() => new Date());
+  const [activeDate, setActiveDate] = useState<Date | undefined>(undefined);
   const activeDateStr = activeDate ? activeDate.toLocaleDateString('en-CA') : undefined;
   const { data: urls, isLoading } = useUrls(activeDateStr);
   const analyze = useAnalyze();
@@ -392,9 +392,7 @@ export default function Dashboard() {
                 className="h-7 px-2 text-xs gap-1.5"
               >
                 <CalendarIcon className="size-3.5" />
-                {activeDate
-                  ? activeDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'All dates'}
+                {(activeDate ?? new Date()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -408,7 +406,7 @@ export default function Dashboard() {
           </Popover>
           {activeDate && (
             <button
-              onClick={() => setActiveDate(new Date())}
+              onClick={() => setActiveDate(undefined)}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
               <X className="size-3" /> Clear
