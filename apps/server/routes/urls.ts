@@ -16,6 +16,7 @@ const createSchema = z.object({
 });
 
 const updateSchema = z.object({
+  url: z.string().url().optional(),
   name: z.string().optional(),
   scheduleInterval: scheduleEnum.optional(),
   isActive: z.boolean().optional(),

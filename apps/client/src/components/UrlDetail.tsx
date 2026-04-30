@@ -16,6 +16,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import ScoreCircle from '@/components/ScoreCircle';
 import { MetricChart, METRICS } from '@/components/MetricsChart';
+import { Input } from '@/components/ui/input';
 import { ArrowLeft, RefreshCw, Pencil, X } from 'lucide-react';
 import type { Analysis } from '@/api';
 
@@ -133,6 +134,30 @@ export default function UrlDetail() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
 
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [localName, setLocalName] = useState('');
+  const [localUrl, setLocalUrl] = useState('');
+
+  function startEditingInfo() {
+    setLocalName(urlData?.name ?? '');
+    setLocalUrl(urlData?.url ?? '');
+    setEditingInfo(true);
+  }
+
+  async function handleSaveInfo() {
+    try {
+      await updateUrl.mutateAsync({
+        id: urlId,
+        name: localName.trim() || undefined,
+        url: localUrl.trim(),
+      });
+      toast.success('URL updated');
+      setEditingInfo(false);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
   const tagSuggestions = existingTags
     .map((t) => t.name)
     .filter((n) => n.includes(tagInput.toLowerCase()) && !localTags.includes(n));
@@ -220,8 +245,48 @@ export default function UrlDetail() {
           </Link>
         </Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold truncate">{urlData.name ?? urlData.url}</h1>
-          <p className="text-xs text-muted-foreground truncate">{urlData.url}</p>
+          {!editingInfo ? (
+            <div className="flex items-center gap-1.5 group">
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold truncate">{urlData.name ?? urlData.url}</h1>
+                <p className="text-xs text-muted-foreground truncate">{urlData.url}</p>
+              </div>
+              <button
+                onClick={startEditingInfo}
+                className="shrink-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Edit name and URL"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  placeholder="Name (optional)"
+                  value={localName}
+                  onChange={(e) => setLocalName(e.target.value)}
+                  className="h-8 text-sm"
+                />
+                <Input
+                  placeholder="https://example.com"
+                  value={localUrl}
+                  onChange={(e) => setLocalUrl(e.target.value)}
+                  required
+                  type="url"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSaveInfo} disabled={updateUrl.isPending || !localUrl.trim()}>
+                  {updateUrl.isPending ? 'Saving…' : 'Save'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditingInfo(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
         {/* Tags */}
         {!editingTags ? (

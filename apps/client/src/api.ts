@@ -92,7 +92,7 @@ export function useAddUrl() {
 export function useUpdateUrl() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: number; name?: string; scheduleInterval?: ScheduleInterval; isActive?: boolean; displayOrder?: number | null; tags?: string[] }) => {
+    mutationFn: async ({ id, ...data }: { id: number; url?: string; name?: string; scheduleInterval?: ScheduleInterval; isActive?: boolean; displayOrder?: number | null; tags?: string[] }) => {
       const res = await throwIfError(await rpc.api.urls[':id'].$put({ param: { id: String(id) }, json: data }));
       return res.json() as Promise<Url>;
     },
