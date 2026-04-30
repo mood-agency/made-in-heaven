@@ -193,8 +193,11 @@ export function useQueueState(): Map<number, QueueEntry> {
   return state;
 }
 
-export async function downloadScoresCsv(ids?: number[]): Promise<void> {
-  const params = ids && ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+export async function downloadScoresCsv(ids?: number[], date?: string): Promise<void> {
+  const parts: string[] = [];
+  if (ids && ids.length > 0) parts.push(`ids=${ids.join(',')}`);
+  if (date) parts.push(`date=${encodeURIComponent(date)}`);
+  const params = parts.length > 0 ? `?${parts.join('&')}` : '';
   const res = await fetch(`/api/analyses/export${params}`);
   if (!res.ok) throw new Error('Failed to download CSV');
   const blob = await res.blob();

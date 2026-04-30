@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { Variables } from '../types.js';
 import { analyses, urls, urlTags, tags } from '../db/schema/index.js';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, gte, lte } from 'drizzle-orm';
 
 const querySchema = z.object({
   strategy: z.enum(['mobile', 'desktop']).optional(),
@@ -12,6 +12,7 @@ const querySchema = z.object({
 
 const exportQuerySchema = z.object({
   ids: z.string().optional(), // comma-separated URL IDs
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
 });
 
 function csvField(val: string | number | null | undefined): string {
@@ -23,10 +24,17 @@ function csvField(val: string | number | null | undefined): string {
 const router = new Hono<{ Variables: Variables }>()
   .get('/export', zValidator('query', exportQuerySchema), async (c) => {
     const db = c.var.db;
-    const { ids: idsParam } = c.req.valid('query');
+    const { ids: idsParam, date } = c.req.valid('query');
     const filterIds = idsParam
       ? idsParam.split(',').map(Number).filter((n) => !isNaN(n) && n > 0)
       : null;
+
+    const conditions = [];
+    if (filterIds && filterIds.length > 0) conditions.push(inArray(analyses.urlId, filterIds));
+    if (date) {
+      conditions.push(gte(analyses.analyzedAt, new Date(`${date}T00:00:00.000Z`)));
+      conditions.push(lte(analyses.analyzedAt, new Date(`${date}T23:59:59.999Z`)));
+    }
 
     const allAnalyses = await db
       .select({
@@ -43,7 +51,7 @@ const router = new Hono<{ Variables: Variables }>()
       })
       .from(analyses)
       .innerJoin(urls, eq(analyses.urlId, urls.id))
-      .where(filterIds && filterIds.length > 0 ? inArray(analyses.urlId, filterIds) : undefined)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(analyses.analyzedAt));
 
     const urlIds = [...new Set(allAnalyses.map((r) => r.urlId))];

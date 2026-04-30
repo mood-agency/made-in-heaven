@@ -42,7 +42,7 @@ function timeAgo(date: string | null): string {
 }
 
 export default function Dashboard() {
-  const [activeDate, setActiveDate] = useState<Date | undefined>(undefined);
+  const [activeDate, setActiveDate] = useState<Date | undefined>(() => new Date());
   const activeDateStr = activeDate ? activeDate.toLocaleDateString('en-CA') : undefined;
   const { data: urls, isLoading } = useUrls(activeDateStr);
   const analyze = useAnalyze();
@@ -314,7 +314,7 @@ export default function Dashboard() {
             onClick={async () => {
               try {
                 const isFiltered = activeTag !== null || searchQuery.trim() !== '' || activeDate !== undefined;
-                await downloadScoresCsv(isFiltered ? searched.map((u) => u.id) : undefined);
+                await downloadScoresCsv(isFiltered ? searched.map((u) => u.id) : undefined, activeDateStr);
               } catch (err) {
                 toast.error(String(err));
               }
