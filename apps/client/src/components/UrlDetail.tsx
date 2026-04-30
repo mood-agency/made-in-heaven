@@ -150,7 +150,7 @@ function MetaPreview({
       <button
         onClick={onRefresh}
         disabled={refreshing}
-        title="Refresh preview image. Title and description update with each analysis."
+        title="Refresh title, description and preview image"
         className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
       >
         <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />

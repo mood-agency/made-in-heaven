@@ -5,7 +5,7 @@ import type { Variables, Db } from '../types.js';
 import { urls, analyses, tags, urlTags } from '../db/schema/index.js';
 import { eq, desc, inArray, and } from 'drizzle-orm';
 import { analyzeUrl } from '../services/pagespeed.js';
-import { fetchOgImage } from '../services/og-image.js';
+import { fetchPageMeta } from '../services/og-image.js';
 
 const scheduleEnum = z.enum(['manual', 'daily']);
 
@@ -67,9 +67,19 @@ function extractDomainTag(urlStr: string): string {
   }
 }
 
-async function refreshOgImage(db: Db, urlId: number, urlStr: string): Promise<void> {
-  const image = await fetchOgImage(urlStr);
-  await db.update(urls).set({ metaImage: image, metaFetchedAt: new Date() }).where(eq(urls.id, urlId));
+async function refreshMeta(db: Db, urlId: number, urlStr: string): Promise<void> {
+  const meta = await fetchPageMeta(urlStr);
+  const update: Partial<typeof urls.$inferInsert> = {
+    metaImage: meta.image,
+    metaTitle: meta.title,
+    metaDescription: meta.description,
+    metaFetchedAt: new Date(),
+  };
+  if (meta.title) {
+    const [row] = await db.select({ name: urls.name }).from(urls).where(eq(urls.id, urlId)).limit(1);
+    if (!row?.name?.trim()) update.name = meta.title;
+  }
+  await db.update(urls).set(update).where(eq(urls.id, urlId));
 }
 
 // D1 SQLite limit is ~100 bound variables per query
@@ -210,7 +220,7 @@ const router = new Hono<{ Variables: Variables }>()
     if (data.scheduleInterval !== 'manual') {
       c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
     }
-    const ogFetch = refreshOgImage(db, result.id, result.url);
+    const ogFetch = refreshMeta(db, result.id, result.url);
     if (c.executionCtx) {
       c.executionCtx.waitUntil(ogFetch);
     } else {
@@ -243,7 +253,7 @@ const router = new Hono<{ Variables: Variables }>()
         if (data.scheduleInterval !== 'manual') {
           c.var.reschedule?.(result.id, result.url, data.scheduleInterval);
         }
-        const ogFetch = refreshOgImage(db, result.id, result.url);
+        const ogFetch = refreshMeta(db, result.id, result.url);
         if (c.executionCtx) {
           c.executionCtx.waitUntil(ogFetch);
         } else {
@@ -351,7 +361,7 @@ const router = new Hono<{ Variables: Variables }>()
     const id = Number(c.req.param('id'));
     const [url] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
     if (!url) return c.json({ message: 'Not found' }, 404);
-    await refreshOgImage(db, id, url.url);
+    await refreshMeta(db, id, url.url);
     const [updated] = await db.select().from(urls).where(eq(urls.id, id)).limit(1);
     const currentTags = (await getTagsForUrls(db, [id]))[id] ?? [];
     await invalidateUrlsCache(c.req.url, c.executionCtx);

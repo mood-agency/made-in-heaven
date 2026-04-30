@@ -1,3 +1,9 @@
+export interface PageMeta {
+  title: string | null;
+  description: string | null;
+  image: string | null;
+}
+
 async function readHead(response: Response, maxBytes = 150_000): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return '';
@@ -17,27 +23,49 @@ async function readHead(response: Response, maxBytes = 150_000): Promise<string>
   return text;
 }
 
-function extractOgImage(html: string, baseUrl: string): string | null {
-  const metaRegex = /<meta\s+([^>]+?)(?:\s*\/)?>/gi;
-  let match;
-  while ((match = metaRegex.exec(html)) !== null) {
-    const attrs = match[1];
-    const hasOgImage = /(?:property|name)=["'](?:og:image(?::url)?|twitter:image)["']/i.test(attrs);
-    if (hasOgImage) {
-      const contentMatch = /content=["']([^"']+)["']/i.exec(attrs);
-      if (contentMatch?.[1]) {
-        try {
-          return new URL(contentMatch[1], baseUrl).toString();
-        } catch {
-          return contentMatch[1];
-        }
-      }
-    }
+function getMetaContent(html: string, ...names: string[]): string | null {
+  for (const name of names) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // property/name before content
+    let m = new RegExp(
+      `<meta\\s+(?:property|name)=["']${escaped}["']\\s+content=["']([^"']+)["']`,
+      'i',
+    ).exec(html);
+    if (m?.[1]) return m[1];
+    // content before property/name
+    m = new RegExp(
+      `<meta\\s+content=["']([^"']+)["']\\s+(?:property|name)=["']${escaped}["']`,
+      'i',
+    ).exec(html);
+    if (m?.[1]) return m[1];
   }
   return null;
 }
 
-export async function fetchOgImage(urlStr: string): Promise<string | null> {
+function extractMeta(html: string, baseUrl: string): PageMeta {
+  const ogTitle = getMetaContent(html, 'og:title');
+  const rawTitle = /<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1]?.trim() ?? null;
+  const title = (ogTitle ?? rawTitle)?.replace(/\s+/g, ' ').trim() || null;
+
+  const description =
+    getMetaContent(html, 'og:description', 'description')
+      ?.replace(/\s+/g, ' ')
+      .trim() || null;
+
+  const rawImage = getMetaContent(html, 'og:image', 'og:image:url', 'twitter:image');
+  let image: string | null = null;
+  if (rawImage) {
+    try {
+      image = new URL(rawImage, baseUrl).toString();
+    } catch {
+      image = rawImage;
+    }
+  }
+
+  return { title, description, image };
+}
+
+export async function fetchPageMeta(urlStr: string): Promise<PageMeta> {
   try {
     const res = await fetch(urlStr, {
       signal: AbortSignal.timeout(8_000),
@@ -46,12 +74,12 @@ export async function fetchOgImage(urlStr: string): Promise<string | null> {
         'Accept': 'text/html',
       },
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { title: null, description: null, image: null };
     const ct = res.headers.get('content-type') ?? '';
-    if (!ct.includes('text/html')) return null;
+    if (!ct.includes('text/html')) return { title: null, description: null, image: null };
     const html = await readHead(res);
-    return extractOgImage(html, urlStr);
+    return extractMeta(html, urlStr);
   } catch {
-    return null;
+    return { title: null, description: null, image: null };
   }
 }
