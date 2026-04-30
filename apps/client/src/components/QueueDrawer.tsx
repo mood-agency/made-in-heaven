@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
-import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, Url } from '@/api';
-import { useCancelQueue } from '@/api';
+import { useCancelQueue, useAnalyze } from '@/api';
 import { Drawer, DrawerPortal, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import {
   Tooltip,
@@ -26,6 +26,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const [minimized, setMinimized] = useState(false);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const cancelQueue = useCancelQueue();
+  const analyze = useAnalyze();
 
   const entries = [...queueState.values()]
     .filter((e) => !((e.status === 'done' || e.status === 'cancelled') && dismissed.has(e.urlId)))
@@ -190,11 +191,12 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                       <span className="relative shrink-0 w-16 flex items-center justify-end">
                         <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity">Cancelado</span>
                         <button
-                          onClick={() => setDismissed((prev) => new Set([...prev, entry.urlId]))}
-                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                          title="Descartar"
+                          onClick={() => analyze.mutate(entry.urlId)}
+                          disabled={analyze.isPending}
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-blue-500"
+                          title="Reintentar"
                         >
-                          <X className="size-3.5" />
+                          <RotateCcw className="size-3.5" />
                         </button>
                       </span>
                     ) : (

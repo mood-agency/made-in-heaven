@@ -203,7 +203,7 @@ function SortableRow({
             variant="ghost"
             size="sm"
             onClick={() => onAnalyze(u.id)}
-            disabled={isAnalyzePending || queueEntry?.status === 'queued' || queueEntry?.status === 'running' || queueEntry?.status === 'cancelled'}
+            disabled={isAnalyzePending || queueEntry?.status === 'queued' || queueEntry?.status === 'running'}
             title="Analizar"
           >
             {queueEntry?.status === 'running' ? (
