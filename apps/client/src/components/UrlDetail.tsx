@@ -5,7 +5,6 @@ import { useUrls, useAnalyses, useAnalyze, useUpdateUrl, useTags, useRefreshMeta
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -19,6 +18,15 @@ import { MetricChart, METRICS } from '@/components/MetricsChart';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, RefreshCw, Pencil, X } from 'lucide-react';
 import type { Analysis } from '@/api';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { DataTable } from '@/components/ui/data-table';
+import { SortIcon } from '@/components/url-table-helpers';
 
 const SCHEDULES = [
   { value: 'manual', label: 'Manual only' },
@@ -36,42 +44,95 @@ function latestPerDay(analyses: Analysis[]): Analysis[] {
   });
 }
 
+function makeAnalysisHeader(label: string) {
+  return ({ column }: { column: { getIsSorted: () => false | 'asc' | 'desc'; getToggleSortingHandler: () => ((e: unknown) => void) | undefined } }) => (
+    <button
+      className="flex items-center justify-end w-full hover:text-foreground"
+      onClick={(e) => column.getToggleSortingHandler()?.(e)}
+    >
+      {label}
+      <SortIcon sorted={column.getIsSorted()} />
+    </button>
+  );
+}
+
+const analysisColumns: ColumnDef<Analysis>[] = [
+  {
+    id: 'analyzedAt',
+    accessorFn: (a) => a.analyzedAt ? new Date(a.analyzedAt).getTime() : 0,
+    header: ({ column }) => (
+      <button className="flex items-center hover:text-foreground" onClick={(e) => column.getToggleSortingHandler()?.(e)}>
+        Date <SortIcon sorted={column.getIsSorted()} />
+      </button>
+    ),
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {row.original.analyzedAt ? new Date(row.original.analyzedAt).toLocaleString() : '—'}
+      </span>
+    ),
+    sortDescFirst: true,
+  },
+  {
+    id: 'score',
+    accessorFn: (a) => a.performanceScore ?? -1,
+    header: makeAnalysisHeader('Score'),
+    cell: ({ row }) => (
+      <div className="text-right font-medium">{row.original.performanceScore ?? '—'}</div>
+    ),
+  },
+  {
+    id: 'fcp',
+    accessorFn: (a) => a.fcp ?? -1,
+    header: makeAnalysisHeader('FCP'),
+    cell: ({ row }) => <div className="text-right">{row.original.fcp ? `${Math.round(row.original.fcp)}ms` : '—'}</div>,
+  },
+  {
+    id: 'lcp',
+    accessorFn: (a) => a.lcp ?? -1,
+    header: makeAnalysisHeader('LCP'),
+    cell: ({ row }) => <div className="text-right">{row.original.lcp ? `${Math.round(row.original.lcp)}ms` : '—'}</div>,
+  },
+  {
+    id: 'tbt',
+    accessorFn: (a) => a.tbt ?? -1,
+    header: makeAnalysisHeader('TBT'),
+    cell: ({ row }) => <div className="text-right">{row.original.tbt ? `${Math.round(row.original.tbt)}ms` : '—'}</div>,
+  },
+  {
+    id: 'cls',
+    accessorFn: (a) => a.cls ?? -1,
+    header: makeAnalysisHeader('CLS'),
+    cell: ({ row }) => <div className="text-right">{row.original.cls?.toFixed(3) ?? '—'}</div>,
+  },
+  {
+    id: 'si',
+    accessorFn: (a) => a.si ?? -1,
+    header: makeAnalysisHeader('SI'),
+    cell: ({ row }) => <div className="text-right">{row.original.si ? `${Math.round(row.original.si)}ms` : '—'}</div>,
+  },
+];
+
 function AnalysisTable({ analyses, strategy }: { analyses: Analysis[]; strategy: string }) {
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'analyzedAt', desc: true }]);
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const table = useReactTable({
+    data: analyses,
+    columns: analysisColumns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getRowId: (a) => String(a.id),
+  });
+
   if (analyses.length === 0) return null;
+
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium capitalize">{strategy}</p>
-      <div className="rounded-md border overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead className="text-right">Score</TableHead>
-              <TableHead className="text-right">FCP</TableHead>
-              <TableHead className="text-right">LCP</TableHead>
-              <TableHead className="text-right">TBT</TableHead>
-              <TableHead className="text-right">CLS</TableHead>
-              <TableHead className="text-right">SI</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {analyses.map((a) => (
-              <TableRow key={a.id}>
-                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                  {a.analyzedAt ? new Date(a.analyzedAt).toLocaleString() : '—'}
-                </TableCell>
-                <TableCell className="text-right font-medium">
-                  {a.performanceScore ?? '—'}
-                </TableCell>
-                <TableCell className="text-right">{a.fcp ? `${Math.round(a.fcp)}ms` : '—'}</TableCell>
-                <TableCell className="text-right">{a.lcp ? `${Math.round(a.lcp)}ms` : '—'}</TableCell>
-                <TableCell className="text-right">{a.tbt ? `${Math.round(a.tbt)}ms` : '—'}</TableCell>
-                <TableCell className="text-right">{a.cls?.toFixed(3) ?? '—'}</TableCell>
-                <TableCell className="text-right">{a.si ? `${Math.round(a.si)}ms` : '—'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="overflow-x-auto">
+        <DataTable table={table} />
       </div>
     </div>
   );
