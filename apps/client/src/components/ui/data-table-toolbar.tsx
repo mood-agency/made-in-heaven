@@ -123,6 +123,95 @@ export function DataTableFacetedFilter<TData, TValue>({
   );
 }
 
+// ─── Score bucket filter ─────────────────────────────────────────────────────
+
+const SCORE_BUCKETS = [
+  { value: 'good', label: 'Bueno', range: '70–100', className: 'text-green-600' },
+  { value: 'needs-improvement', label: 'Mejorable', range: '50–69', className: 'text-amber-600' },
+  { value: 'poor', label: 'Bajo', range: '0–49', className: 'text-red-600' },
+] as const;
+
+interface DataTableScoreBucketFilterProps<TData, TValue> {
+  column: Column<TData, TValue>;
+  title: string;
+}
+
+export function DataTableScoreBucketFilter<TData, TValue>({
+  column,
+  title,
+}: DataTableScoreBucketFilterProps<TData, TValue>) {
+  const selectedValues = new Set(column.getFilterValue() as string[] | undefined);
+  const facets = column.getFacetedUniqueValues();
+
+  const counts = SCORE_BUCKETS.reduce<Record<string, number>>((acc, bucket) => {
+    let n = 0;
+    facets.forEach((count, score) => {
+      if (typeof score !== 'number' || score < 0) return;
+      if (bucket.value === 'good' && score >= 70) n += count;
+      else if (bucket.value === 'needs-improvement' && score >= 50 && score < 70) n += count;
+      else if (bucket.value === 'poor' && score < 50) n += count;
+    });
+    acc[bucket.value] = n;
+    return acc;
+  }, {});
+
+  function toggle(value: string) {
+    const next = new Set(selectedValues);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    column.setFilterValue(next.size > 0 ? Array.from(next) : undefined);
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+          {title}
+          {selectedValues.size > 0 && (
+            <>
+              <Separator orientation="vertical" className="mx-0.5 h-4" />
+              <Badge variant="secondary" className="px-1 text-xs font-normal">
+                {selectedValues.size}
+              </Badge>
+            </>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-1" align="start">
+        <div className="flex flex-col gap-0.5">
+          {SCORE_BUCKETS.map((bucket) => (
+            <button
+              key={bucket.value}
+              onClick={() => toggle(bucket.value)}
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+            >
+              <Checkbox checked={selectedValues.has(bucket.value)} onCheckedChange={() => toggle(bucket.value)} />
+              <span className={`flex-1 text-left ${bucket.className}`}>{bucket.label}</span>
+              <span className="text-xs text-muted-foreground">{bucket.range}</span>
+              {(counts[bucket.value] ?? 0) > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground tabular-nums">
+                  {counts[bucket.value]}
+                </span>
+              )}
+            </button>
+          ))}
+          {selectedValues.size > 0 && (
+            <>
+              <Separator className="my-1" />
+              <button
+                onClick={() => column.setFilterValue(undefined)}
+                className="flex items-center justify-center rounded px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Clear filter
+              </button>
+            </>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ─── Column visibility ───────────────────────────────────────────────────────
 
 interface DataTableViewOptionsProps<TData> {

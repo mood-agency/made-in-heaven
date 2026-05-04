@@ -1,4 +1,4 @@
-import { type ColumnDef } from '@tanstack/react-table';
+import { type ColumnDef, type FilterFn } from '@tanstack/react-table';
 import { Link } from 'react-router-dom';
 import { ExternalLink, RefreshCw, Trash2, Loader2 } from 'lucide-react';
 import type { Url, QueueEntry } from '@/api';
@@ -8,6 +8,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import ScoreCircle from '@/components/ScoreCircle';
 import { QueueStatusBadge, SortIcon, DragHandleCell } from '@/components/url-table-helpers';
 import { timeAgo } from '@/lib/utils';
+
+const scoreBucketFilter: FilterFn<Url> = (row, columnId, filterValue: string[]) => {
+  const score = row.getValue<number>(columnId);
+  if (!filterValue || filterValue.length === 0) return true;
+  return filterValue.some((bucket) => {
+    if (bucket === 'good') return score >= 70;
+    if (bucket === 'needs-improvement') return score >= 50 && score < 70;
+    if (bucket === 'poor') return score >= 0 && score < 50;
+    return false;
+  });
+};
+scoreBucketFilter.autoRemove = (val: string[]) => !val || val.length === 0;
 
 export interface UrlColumnHandlers {
   onTagClick: (tag: string, activeTags: string[]) => void;
@@ -129,6 +141,7 @@ export function getUrlColumns(handlers: UrlColumnHandlers): ColumnDef<Url>[] {
       id: 'mobile',
       accessorFn: (u) => u.latestMobile?.performanceScore ?? -1,
       enableSorting: true,
+      filterFn: scoreBucketFilter,
       header: ({ column }) => (
         <button
           className="flex items-center justify-center w-full hover:text-foreground"
@@ -147,6 +160,7 @@ export function getUrlColumns(handlers: UrlColumnHandlers): ColumnDef<Url>[] {
       id: 'desktop',
       accessorFn: (u) => u.latestDesktop?.performanceScore ?? -1,
       enableSorting: true,
+      filterFn: scoreBucketFilter,
       header: ({ column }) => (
         <button
           className="flex items-center justify-center w-full hover:text-foreground"

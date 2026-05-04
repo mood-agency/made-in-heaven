@@ -39,6 +39,7 @@ import { getUrlColumns } from '@/components/UrlTableColumns';
 import {
   DataTableSearch,
   DataTableFacetedFilter,
+  DataTableScoreBucketFilter,
   DataTableViewOptions,
   DataTablePagination,
 } from '@/components/ui/data-table-toolbar';
@@ -185,7 +186,7 @@ export default function Dashboard() {
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    manualSorting: isDndEnabled,
+    manualSorting: false,
     getRowId: (u) => String(u.id),
     globalFilterFn: (row, _columnId, filterValue: string) =>
       row.original.url.toLowerCase().includes(filterValue.toLowerCase()) ||
@@ -196,50 +197,12 @@ export default function Dashboard() {
   const filteredRows = table.getFilteredRowModel().rows;
   const isFiltered = !isDndEnabled || (urls?.length ?? 0) !== filteredRows.length;
 
-  const sortModeLabel = (() => {
-    if (sorting.length === 0) return 'manual';
-    const first = sorting[0];
-    if (first.id === 'name') return 'alpha';
-    if (first.id === 'url') return 'url';
-    if (first.id === 'mobile') return 'mobile';
-    if (first.id === 'desktop') return 'desktop';
-    return null;
-  })();
-
-  function applySortPreset(mode: 'manual' | 'alpha' | 'url' | 'mobile' | 'desktop') {
-    const presets: Record<typeof mode, Parameters<typeof setSorting>[0]> = {
-      manual: [],
-      alpha: [{ id: 'name', desc: false }],
-      url: [{ id: 'url', desc: false }],
-      mobile: [{ id: 'mobile', desc: true }],
-      desktop: [{ id: 'desktop', desc: true }],
-    };
-    setSorting(presets[mode]);
-  }
-
   return (
     <div className="flex flex-col gap-6">
       {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">PageSpeed Monitor</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Sort presets */}
-          <div className="flex rounded-md border overflow-hidden text-xs">
-            {(['manual', 'alpha', 'url', 'mobile', 'desktop'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => applySortPreset(mode)}
-                className={`px-3 py-1.5 transition-colors ${
-                  sortModeLabel === mode
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-accent text-muted-foreground'
-                }`}
-              >
-                {mode === 'manual' ? '#' : mode === 'alpha' ? 'A-Z' : mode === 'url' ? 'URL' : mode === 'mobile' ? 'Mobile' : 'Desktop'}
-              </button>
-            ))}
-          </div>
-
           {/* View toggle */}
           <div className="flex rounded-md border overflow-hidden">
             <button
@@ -321,6 +284,14 @@ export default function Dashboard() {
 
         {table.getColumn('tags') && (
           <DataTableFacetedFilter column={table.getColumn('tags')!} title="Tags" />
+        )}
+
+        {table.getColumn('mobile') && (
+          <DataTableScoreBucketFilter column={table.getColumn('mobile')!} title="Mobile" />
+        )}
+
+        {table.getColumn('desktop') && (
+          <DataTableScoreBucketFilter column={table.getColumn('desktop')!} title="Desktop" />
         )}
 
         <DataTableViewOptions table={table} />
