@@ -56,6 +56,72 @@ function makeAnalysisHeader(label: string) {
   );
 }
 
+function DiffBadge({ diffPercent }: { diffPercent: number | null | undefined }) {
+  if (diffPercent === null || diffPercent === undefined) {
+    return <span className="text-xs text-muted-foreground">First capture</span>;
+  }
+  if (diffPercent < 0.5) {
+    return <span className="text-xs font-medium text-green-600 dark:text-green-400">No change</span>;
+  }
+  if (diffPercent < 5) {
+    return <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">{diffPercent.toFixed(1)}% changed</span>;
+  }
+  return <span className="text-xs font-medium text-red-600 dark:text-red-400">{diffPercent.toFixed(1)}% changed</span>;
+}
+
+function ScreenshotCard({
+  label,
+  analysis,
+}: {
+  label: string;
+  analysis: Analysis | undefined;
+}) {
+  if (!analysis?.screenshotKey) return null;
+  const src = `/api/screenshots/${analysis.screenshotKey}`;
+  return (
+    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
+        <div className="flex items-center gap-2">
+          <DiffBadge diffPercent={analysis.diffPercent} />
+          {analysis.diffKey && (
+            <a
+              href={`/api/screenshots/${analysis.diffKey}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Diff
+            </a>
+          )}
+        </div>
+      </div>
+      <a href={src} target="_blank" rel="noreferrer" className="block">
+        <img
+          src={src}
+          alt={`${label} screenshot`}
+          loading="lazy"
+          className="w-full rounded border bg-muted object-cover object-top max-h-52"
+        />
+      </a>
+    </div>
+  );
+}
+
+function ScreenshotPanel({ mobile, desktop }: { mobile: Analysis | undefined; desktop: Analysis | undefined }) {
+  const hasAny = mobile?.screenshotKey || desktop?.screenshotKey;
+  if (!hasAny) return null;
+  return (
+    <div className="flex flex-col gap-2 p-4 rounded-lg border bg-muted/30">
+      <p className="text-sm font-medium">Latest screenshots</p>
+      <div className="flex gap-4 flex-col sm:flex-row">
+        <ScreenshotCard label="Mobile" analysis={mobile} />
+        <ScreenshotCard label="Desktop" analysis={desktop} />
+      </div>
+    </div>
+  );
+}
+
 const analysisColumns: ColumnDef<Analysis>[] = [
   {
     id: 'analyzedAt',
@@ -109,6 +175,37 @@ const analysisColumns: ColumnDef<Analysis>[] = [
     accessorFn: (a) => a.si ?? -1,
     header: makeAnalysisHeader('SI'),
     cell: ({ row }) => <div className="text-right">{row.original.si ? `${Math.round(row.original.si)}ms` : '—'}</div>,
+  },
+  {
+    id: 'screenshot',
+    header: () => <div className="text-right">📸</div>,
+    cell: ({ row }) => (
+      <div className="flex justify-end gap-1.5">
+        {row.original.screenshotKey && (
+          <a
+            href={`/api/screenshots/${row.original.screenshotKey}`}
+            target="_blank"
+            rel="noreferrer"
+            title="View screenshot"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            📸
+          </a>
+        )}
+        {row.original.diffKey && (
+          <a
+            href={`/api/screenshots/${row.original.diffKey}`}
+            target="_blank"
+            rel="noreferrer"
+            title="View diff"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Δ
+          </a>
+        )}
+      </div>
+    ),
+    enableSorting: false,
   },
 ];
 
@@ -499,6 +596,8 @@ export default function UrlDetail() {
         onRefresh={handleRefreshMeta}
         refreshing={refreshMeta.isPending}
       />
+
+      <ScreenshotPanel mobile={mobile[0]} desktop={desktop[0]} />
 
       <div className="flex gap-4 flex-wrap">
         <StrategyCard strategy="mobile" latest={mobile[0]} />

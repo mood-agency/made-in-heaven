@@ -37,6 +37,10 @@ export interface Analysis {
   si: number | null;
   tti: number | null;
   error: string | null;
+  screenshotKey: string | null;
+  screenshotViewKey: string | null;
+  diffKey: string | null;
+  diffPercent: number | null;
 }
 
 export interface Tag {

@@ -7,6 +7,7 @@ import { eq, and } from 'drizzle-orm';
 import { analyzeUrl } from './services/pagespeed.js';
 import type { Variables } from './types.js';
 import { QueueStateDO } from './queue-state-do.js';
+import type { BrowserWorker } from '@cloudflare/playwright';
 
 export { QueueStateDO };
 
@@ -18,6 +19,8 @@ type Env = {
   ASSETS: Fetcher;
   ANALYSIS_QUEUE: Queue<AnalysisMessage>;
   QUEUE_STATE: DurableObjectNamespace;
+  BROWSER: BrowserWorker;
+  SCREENSHOTS: R2Bucket;
 };
 
 const CRON_TO_INTERVAL: Record<string, string> = {
@@ -75,6 +78,19 @@ worker.post('/api/queue/clear', async (c) => {
   return c.json({ cleared });
 });
 
+worker.get('/api/screenshots/*', async (c) => {
+  const key = decodeURIComponent(c.req.path.replace('/api/screenshots/', ''));
+  const obj = await c.env.SCREENSHOTS.get(key);
+  if (!obj) return c.notFound();
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType ?? 'image/png',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'ETag': obj.httpEtag,
+    },
+  });
+});
+
 // Serve the React SPA for all non-API routes
 worker.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
@@ -118,7 +134,10 @@ export default {
         }
         try {
           await qsStub.markRunning(msg.body.urlId);
-          await analyzeUrl(db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY);
+          const screenshotEnv = env.BROWSER && env.SCREENSHOTS
+            ? { BROWSER: env.BROWSER, SCREENSHOTS: env.SCREENSHOTS }
+            : undefined;
+          await analyzeUrl(db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY, screenshotEnv);
           await qsStub.markDone(msg.body.urlId);
           msg.ack();
         } catch (err) {
