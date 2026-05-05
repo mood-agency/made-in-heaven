@@ -131,10 +131,13 @@ export async function analyzeUrl(
         screenshotViewKey = viewKey;
 
         const prevViewKey = await getPrevViewKey(db, urlId, strategy);
+        console.log(`[pagespeed] ${strategy} prevViewKey=${prevViewKey}`);
         if (prevViewKey) {
           const prevObj = await screenshotEnv.SCREENSHOTS.get(prevViewKey);
+          console.log(`[pagespeed] ${strategy} prevObj=${prevObj ? 'found' : 'null'}`);
           if (prevObj) {
             const prevBuf = await prevObj.arrayBuffer();
+            console.log(`[pagespeed] ${strategy} calling computeDiff, prevBuf=${prevBuf.byteLength}, viewBuf=${viewBuf.byteLength}`);
             const result = await computeDiff(prevBuf, viewBuf);
             if (result) {
               const dKey = `screenshots/${urlId}/${ts}-${strategy}.diff.png`;

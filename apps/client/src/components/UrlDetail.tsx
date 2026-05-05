@@ -16,7 +16,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import ScoreCircle from '@/components/ScoreCircle';
 import { MetricChart, METRICS } from '@/components/MetricsChart';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, RefreshCw, Pencil, X } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Pencil, X, ExternalLink } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import type { Analysis } from '@/api';
 import {
   useReactTable,
@@ -69,56 +70,111 @@ function DiffBadge({ diffPercent }: { diffPercent: number | null | undefined }) 
   return <span className="text-xs font-medium text-red-600 dark:text-red-400">{diffPercent.toFixed(1)}% changed</span>;
 }
 
+type LightboxState = { src: string; label: string; diffSrc?: string; wide?: boolean };
+
 function ScreenshotCard({
   label,
   analysis,
+  wide,
+  onOpen,
 }: {
   label: string;
   analysis: Analysis | undefined;
+  wide?: boolean;
+  onOpen: (state: LightboxState) => void;
 }) {
   if (!analysis?.screenshotKey) return null;
   const src = `/api/screenshots/${analysis.screenshotKey}`;
+  const diffSrc = analysis.diffKey ? `/api/screenshots/${analysis.diffKey}` : undefined;
   return (
     <div className="flex flex-col gap-1.5 flex-1 min-w-0">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
         <div className="flex items-center gap-2">
           <DiffBadge diffPercent={analysis.diffPercent} />
-          {analysis.diffKey && (
-            <a
-              href={`/api/screenshots/${analysis.diffKey}`}
-              target="_blank"
-              rel="noreferrer"
+          {diffSrc && (
+            <button
+              onClick={() => onOpen({ src: diffSrc, label: `${label} — Diff`, wide })}
               className="text-xs text-muted-foreground hover:text-foreground underline"
             >
               Diff
-            </a>
+            </button>
           )}
         </div>
       </div>
-      <a href={src} target="_blank" rel="noreferrer" className="block">
-        <img
-          src={src}
-          alt={`${label} screenshot`}
-          loading="lazy"
-          className="w-full rounded border bg-muted object-cover object-top max-h-52"
-        />
-      </a>
+      <button
+        onClick={() => onOpen({ src, label, diffSrc, wide })}
+        className="block w-full text-left cursor-zoom-in"
+      >
+        <div className="aspect-[4/3] overflow-hidden rounded border bg-muted">
+          <img
+            src={src}
+            alt={`${label} screenshot`}
+            loading="lazy"
+            className="w-full h-full object-cover object-top"
+          />
+        </div>
+      </button>
     </div>
   );
 }
 
 function ScreenshotPanel({ mobile, desktop }: { mobile: Analysis | undefined; desktop: Analysis | undefined }) {
   const hasAny = mobile?.screenshotKey || desktop?.screenshotKey;
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+
   if (!hasAny) return null;
   return (
-    <div className="flex flex-col gap-2 p-4 rounded-lg border bg-muted/30">
-      <p className="text-sm font-medium">Latest screenshots</p>
-      <div className="flex gap-4 flex-col sm:flex-row">
-        <ScreenshotCard label="Mobile" analysis={mobile} />
-        <ScreenshotCard label="Desktop" analysis={desktop} />
+    <>
+      <div className="flex flex-col gap-2 p-4 rounded-lg border bg-muted/30">
+        <p className="text-sm font-medium">Latest screenshots</p>
+        <div className="flex gap-3 flex-col sm:flex-row">
+          <ScreenshotCard label="Mobile" analysis={mobile} onOpen={setLightbox} />
+          <ScreenshotCard label="Desktop" analysis={desktop} wide onOpen={setLightbox} />
+        </div>
       </div>
-    </div>
+
+      <Dialog open={!!lightbox} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
+        <DialogContent
+          className={`p-0 gap-0 overflow-hidden ${lightbox?.wide ? 'max-w-[95vw] sm:max-w-[95vw] w-[95vw]' : 'max-w-sm sm:max-w-sm'}`}
+          showCloseButton={false}
+        >
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b">
+            <span className="text-sm font-medium">{lightbox?.label}</span>
+            <div className="flex items-center gap-1">
+              {lightbox?.diffSrc && (
+                <button
+                  onClick={() => setLightbox({ src: lightbox.diffSrc!, label: `${lightbox.label} — Diff`, wide: lightbox.wide })}
+                  className="text-xs text-muted-foreground hover:text-foreground underline px-2 py-1"
+                >
+                  Diff
+                </button>
+              )}
+              <a
+                href={lightbox?.src}
+                target="_blank"
+                rel="noreferrer"
+                title="Open full size"
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <ExternalLink className="size-3.5" />
+              </a>
+              <button
+                onClick={() => setLightbox(null)}
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </div>
+          <div className="overflow-y-auto max-h-[85vh]">
+            {lightbox && (
+              <img src={lightbox.src} alt={lightbox.label} className="w-full block" />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

@@ -1,16 +1,17 @@
 import { decode, encode } from '@jsquash/png';
+// @ts-ignore – wasm module import resolved by Wrangler bundler
+import squooshPngWasm from './squoosh_png.wasm';
+// @ts-ignore – not in package types but exported from wasm-bindgen output
+import { initSync } from '@jsquash/png/codec/pkg/squoosh_png.js';
 import pixelmatch from 'pixelmatch';
+
+// Initialize the WASM module synchronously at module load time so that
+// decode/encode never need to fetch the .wasm file at runtime.
+initSync(squooshPngWasm);
 
 export interface DiffResult {
   diffPercent: number;
   diffPng: ArrayBuffer;
-}
-
-function toArrayBuffer(buf: Buffer | Uint8Array): ArrayBuffer {
-  if (buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength) {
-    return buf.buffer as ArrayBuffer;
-  }
-  return (buf.buffer as ArrayBuffer).slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }
 
 export async function computeDiff(
@@ -18,42 +19,48 @@ export async function computeDiff(
   currViewPng: ArrayBuffer,
 ): Promise<DiffResult | null> {
   try {
-    const [prev, curr] = await Promise.all([
-      decode(prevViewPng),
-      decode(currViewPng),
-    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prev = await decode(prevViewPng) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const curr = await decode(currViewPng) as any;
 
     const w = Math.min(prev.width, curr.width);
     const h = Math.min(prev.height, curr.height);
 
-    const prevData = w === prev.width && h === prev.height
-      ? prev.data
-      : clipImageData(prev.data, prev.width, w, h);
-    const currData = w === curr.width && h === curr.height
-      ? curr.data
-      : clipImageData(curr.data, curr.width, w, h);
+    const prevData = (w === prev.width && h === prev.height)
+      ? prev.data as Uint8ClampedArray
+      : clipImageData(prev.data as Uint8ClampedArray, prev.width, w, h);
+    const currData = (w === curr.width && h === curr.height)
+      ? curr.data as Uint8ClampedArray
+      : clipImageData(curr.data as Uint8ClampedArray, curr.width, w, h);
 
     const diffData = new Uint8ClampedArray(w * h * 4);
-    const changedPixels: number = pixelmatch(prevData, currData, diffData, w, h, {
-      threshold: 0.1,
-      alpha: 0.3,
-    });
+    const changedPixels: number = pixelmatch(
+      prevData as unknown as Uint8Array,
+      currData as unknown as Uint8Array,
+      diffData as unknown as Uint8Array,
+      w,
+      h,
+      { threshold: 0.1, alpha: 0.3 },
+    );
 
     const diffPercent = (changedPixels / (w * h)) * 100;
 
-    const diffPng = await encode(
-      { data: diffData, width: w, height: h, colorSpace: 'srgb' } as never,
-    );
+    const diffPng = await encode({ data: diffData, width: w, height: h, colorSpace: 'srgb' } as never);
 
     return { diffPercent, diffPng };
   } catch (err) {
-    console.error('[screenshot-diff] diff failed:', err);
+    console.error('[screenshot-diff] diff failed:', String(err));
+    if (err instanceof Error) console.error('[screenshot-diff] stack:', err.stack);
     return null;
   }
 }
 
 export async function toPngArrayBuffer(buf: Buffer | Uint8Array): Promise<ArrayBuffer> {
-  return toArrayBuffer(buf);
+  if (buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength) {
+    return buf.buffer as ArrayBuffer;
+  }
+  return (buf.buffer as ArrayBuffer).slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }
 
 function clipImageData(
