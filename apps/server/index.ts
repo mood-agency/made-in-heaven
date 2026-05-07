@@ -185,8 +185,9 @@ export default {
           } catch (err) {
             console.error(`[analysis-queue] error urlId=${msg.body.urlId}:`, err);
             await qsStub.markFailed(msg.body.urlId, String(err));
-            const is429 = String(err).includes('429') || String(err).includes('Rate limit');
-            msg.retry(is429 ? { delaySeconds: 60 } : undefined);
+            const errStr = String(err);
+            const is429 = errStr.includes('429');
+            msg.retry({ delaySeconds: is429 ? 300 : 60 });
           }
         }),
       );

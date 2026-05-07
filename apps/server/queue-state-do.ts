@@ -18,7 +18,7 @@ type WsMsg =
   | { type: 'purge'; urlIds: number[] };
 
 const TERMINAL_TTL = 24 * 60 * 60 * 1000;
-const QUEUED_TTL = 10 * 60 * 1000;
+const QUEUED_TTL = 2 * 60 * 60 * 1000;
 const RUNNING_TTL = 60_000;
 const SCREENSHOT_RUNNING_TTL = 5 * 60 * 1000;
 const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);

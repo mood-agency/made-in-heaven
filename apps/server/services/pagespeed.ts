@@ -17,6 +17,13 @@ interface PsiResponse {
   lighthouseResult: LighthouseResult;
 }
 
+function isRetriableError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'TimeoutError') return true;
+  if (err instanceof TypeError) return true; // network failure, no response
+  if (/PSI API error (429|500|502|503|504|524)/.test(String(err))) return true;
+  return false;
+}
+
 function extractMetrics(lr: LighthouseResult) {
   return {
     performanceScore: Math.round((lr.categories.performance.score ?? 0) * 100),
@@ -73,6 +80,10 @@ async function runStrategy(url: string, strategy: 'mobile' | 'desktop', apiKey: 
   return { metrics: extractMetrics(data.lighthouseResult), rawText };
 }
 
+type StrategyResult =
+  | { strategy: 'mobile' | 'desktop'; metrics: ReturnType<typeof extractMetrics>; rawText: string; error?: never }
+  | { strategy: 'mobile' | 'desktop'; error: string; metrics?: never; rawText?: never };
+
 export async function runPsiAndInsert(
   db: Db,
   urlId: number,
@@ -81,29 +92,39 @@ export async function runPsiAndInsert(
   storage: R2Storage,
 ): Promise<{ mobileId: number; desktopId: number }> {
   const apiKey = await getApiKey(db, envApiKey);
-  const ids: Partial<Record<'mobile' | 'desktop', number>> = {};
+  const results: StrategyResult[] = [];
 
   for (const strategy of ['mobile', 'desktop'] as const) {
-    let metricsError: string | undefined;
-    let metrics: ReturnType<typeof extractMetrics> | undefined;
-    let rawText: string | undefined;
-
     try {
-      ({ metrics, rawText } = await runStrategy(urlStr, strategy, apiKey));
+      const { metrics, rawText } = await runStrategy(urlStr, strategy, apiKey);
+      results.push({ strategy, metrics, rawText });
     } catch (err) {
-      metricsError = String(err);
+      if (isRetriableError(err)) {
+        // Throw before any DB writes so the queue can retry the whole URL cleanly.
+        throw err;
+      }
+      results.push({ strategy, error: String(err) });
     }
+  }
 
+  // All strategies completed without retriable errors — commit to DB.
+  const ids: Partial<Record<'mobile' | 'desktop', number>> = {};
+
+  for (const result of results) {
     const [row] = await db
       .insert(analyses)
-      .values(metrics ? { urlId, strategy, ...metrics } : { urlId, strategy, error: metricsError })
+      .values(
+        result.metrics
+          ? { urlId, strategy: result.strategy, ...result.metrics }
+          : { urlId, strategy: result.strategy, error: result.error },
+      )
       .returning({ id: analyses.id });
-    ids[strategy] = row.id;
+    ids[result.strategy] = row.id;
 
-    if (rawText) {
+    if (result.rawText) {
       try {
-        const compressed = await gzip(rawText);
-        const rawKey = `psi-raw/${urlId}/${row.id}-${strategy}.json.gz`;
+        const compressed = await gzip(result.rawText);
+        const rawKey = `psi-raw/${urlId}/${row.id}-${result.strategy}.json.gz`;
         await storage.put(rawKey, compressed, {
           httpMetadata: { contentType: 'application/json', contentEncoding: 'gzip' },
         });
