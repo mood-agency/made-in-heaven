@@ -263,7 +263,7 @@ export class QueueStateDO extends DurableObject {
           ...entry,
           status: 'failed',
           updatedAt: now,
-          error: 'Analysis timed out',
+          error: 'Worker watchdog: job stalled with no response',
         };
         this.state.set(urlId, failed);
         timedOutBatch[`status:${urlId}`] = failed;
