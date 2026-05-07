@@ -6,6 +6,9 @@ export interface QueueEntry {
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   updatedAt: number;
   error?: string;
+  screenshotState?: 'queued' | 'running' | 'done' | 'failed';
+  screenshotError?: string;
+  screenshotUpdatedAt?: number;
 }
 
 type WsMsg =
@@ -16,7 +19,9 @@ type WsMsg =
 
 const TERMINAL_TTL = 5 * 60 * 1000;
 const RUNNING_TTL = 60_000;
+const SCREENSHOT_RUNNING_TTL = 5 * 60 * 1000;
 const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);
+const TERMINAL_SCREENSHOT_STATUSES = new Set<NonNullable<QueueEntry['screenshotState']>>(['done', 'failed']);
 
 export class QueueStateDO extends DurableObject {
   private state = new Map<number, QueueEntry>();
@@ -55,8 +60,14 @@ export class QueueStateDO extends DurableObject {
 
   async markDone(urlId: number): Promise<void> {
     await this.ensureLoaded();
-    if (this.state.get(urlId)?.status === 'cancelled') return;
-    const entry: QueueEntry = { urlId, status: 'done', updatedAt: Date.now() };
+    const existing = this.state.get(urlId);
+    if (existing?.status === 'cancelled') return;
+    const entry: QueueEntry = {
+      urlId, status: 'done', updatedAt: Date.now(),
+      screenshotState: existing?.screenshotState,
+      screenshotError: existing?.screenshotError,
+      screenshotUpdatedAt: existing?.screenshotUpdatedAt,
+    };
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
     this.broadcast({ type: 'update', entry });
@@ -65,8 +76,62 @@ export class QueueStateDO extends DurableObject {
 
   async markFailed(urlId: number, error: string): Promise<void> {
     await this.ensureLoaded();
-    if (this.state.get(urlId)?.status === 'cancelled') return;
-    const entry: QueueEntry = { urlId, status: 'failed', updatedAt: Date.now(), error };
+    const existing = this.state.get(urlId);
+    if (existing?.status === 'cancelled') return;
+    const entry: QueueEntry = {
+      urlId, status: 'failed', updatedAt: Date.now(), error,
+      screenshotState: existing?.screenshotState,
+      screenshotError: existing?.screenshotError,
+      screenshotUpdatedAt: existing?.screenshotUpdatedAt,
+    };
+    this.state.set(urlId, entry);
+    await this.ctx.storage.put(`status:${urlId}`, entry);
+    this.broadcast({ type: 'update', entry });
+    await this.scheduleAlarm(TERMINAL_TTL);
+  }
+
+  async markScreenshotQueued(urlId: number): Promise<void> {
+    await this.ensureLoaded();
+    const existing = this.state.get(urlId);
+    if (!existing) return;
+    const entry: QueueEntry = { ...existing, screenshotState: 'queued', screenshotUpdatedAt: Date.now() };
+    this.state.set(urlId, entry);
+    await this.ctx.storage.put(`status:${urlId}`, entry);
+    this.broadcast({ type: 'update', entry });
+  }
+
+  async markScreenshotRunning(urlId: number): Promise<void> {
+    await this.ensureLoaded();
+    const existing = this.state.get(urlId);
+    if (!existing) return;
+    const entry: QueueEntry = { ...existing, screenshotState: 'running', screenshotUpdatedAt: Date.now() };
+    this.state.set(urlId, entry);
+    await this.ctx.storage.put(`status:${urlId}`, entry);
+    this.broadcast({ type: 'update', entry });
+    await this.scheduleAlarm(SCREENSHOT_RUNNING_TTL);
+  }
+
+  async markScreenshotDone(urlId: number): Promise<void> {
+    await this.ensureLoaded();
+    const existing = this.state.get(urlId);
+    if (!existing) return;
+    const entry: QueueEntry = { ...existing, screenshotState: 'done', screenshotUpdatedAt: Date.now() };
+    this.state.set(urlId, entry);
+    await this.ctx.storage.put(`status:${urlId}`, entry);
+    this.broadcast({ type: 'update', entry });
+    await this.scheduleAlarm(TERMINAL_TTL);
+  }
+
+  async markScreenshotFailed(urlId: number, error: string): Promise<void> {
+    await this.ensureLoaded();
+    const existing = this.state.get(urlId);
+    if (!existing) return;
+    const entry: QueueEntry = {
+      ...existing,
+      screenshotState: 'failed',
+      screenshotError: error,
+      screenshotUpdatedAt: Date.now(),
+    };
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
     this.broadcast({ type: 'update', entry });
@@ -89,7 +154,15 @@ export class QueueStateDO extends DurableObject {
     const batch: Record<string, QueueEntry> = {};
     const updated: QueueEntry[] = [];
     for (const entry of toCancel) {
-      const cancelled: QueueEntry = { urlId: entry.urlId, status: 'cancelled', updatedAt: now };
+      const cancelled: QueueEntry = {
+        urlId: entry.urlId,
+        status: 'cancelled',
+        updatedAt: now,
+        // Cancel any pending screenshot too so the entry can be purged
+        screenshotState: entry.screenshotState === 'queued' ? 'failed' : entry.screenshotState,
+        screenshotError: entry.screenshotState === 'queued' ? 'Cancelled' : entry.screenshotError,
+        screenshotUpdatedAt: entry.screenshotState === 'queued' ? now : entry.screenshotUpdatedAt,
+      };
       this.state.set(entry.urlId, cancelled);
       batch[`status:${entry.urlId}`] = cancelled;
       updated.push(cancelled);
@@ -142,6 +215,7 @@ export class QueueStateDO extends DurableObject {
     const now = Date.now();
     const terminalCutoff = now - TERMINAL_TTL;
     const runningCutoff = now - RUNNING_TTL;
+    const screenshotRunningCutoff = now - SCREENSHOT_RUNNING_TTL;
 
     const purgedIds: number[] = [];
     const keysToDelete: string[] = [];
@@ -149,15 +223,40 @@ export class QueueStateDO extends DurableObject {
     const timedOutBatch: Record<string, QueueEntry> = {};
 
     for (const [urlId, entry] of this.state) {
-      if (TERMINAL_STATUSES.has(entry.status) && entry.updatedAt < terminalCutoff) {
+      const isStatusTerminal = TERMINAL_STATUSES.has(entry.status);
+      const isScreenshotTerminal = !entry.screenshotState || TERMINAL_SCREENSHOT_STATUSES.has(entry.screenshotState);
+      const lastUpdated = Math.max(entry.updatedAt, entry.screenshotUpdatedAt ?? 0);
+
+      if (isStatusTerminal && isScreenshotTerminal && lastUpdated < terminalCutoff) {
         purgedIds.push(urlId);
         keysToDelete.push(`status:${urlId}`);
         this.state.delete(urlId);
-      } else if (entry.status === 'running' && entry.updatedAt < runningCutoff) {
-        const failed: QueueEntry = { urlId, status: 'failed', updatedAt: now, error: 'Analysis timed out' };
+        continue;
+      }
+
+      if (entry.status === 'running' && entry.updatedAt < runningCutoff) {
+        const failed: QueueEntry = {
+          ...entry,
+          status: 'failed',
+          updatedAt: now,
+          error: 'Analysis timed out',
+        };
         this.state.set(urlId, failed);
         timedOutBatch[`status:${urlId}`] = failed;
         timedOut.push(failed);
+        continue;
+      }
+
+      if (entry.screenshotState === 'running' && entry.screenshotUpdatedAt && entry.screenshotUpdatedAt < screenshotRunningCutoff) {
+        const updated: QueueEntry = {
+          ...entry,
+          screenshotState: 'failed',
+          screenshotError: 'Screenshot timed out',
+          screenshotUpdatedAt: now,
+        };
+        this.state.set(urlId, updated);
+        timedOutBatch[`status:${urlId}`] = updated;
+        timedOut.push(updated);
       }
     }
 
@@ -172,8 +271,15 @@ export class QueueStateDO extends DurableObject {
     }
 
     const hasRunning = [...this.state.values()].some((e) => e.status === 'running');
-    const hasTerminal = [...this.state.values()].some((e) => TERMINAL_STATUSES.has(e.status));
+    const hasScreenshotRunning = [...this.state.values()].some((e) => e.screenshotState === 'running');
+    const hasTerminal = [...this.state.values()].some((e) => {
+      const isStatusTerminal = TERMINAL_STATUSES.has(e.status);
+      const isScreenshotTerminal = !e.screenshotState || TERMINAL_SCREENSHOT_STATUSES.has(e.screenshotState);
+      return isStatusTerminal && isScreenshotTerminal;
+    });
+
     if (hasRunning) await this.scheduleAlarm(RUNNING_TTL);
+    else if (hasScreenshotRunning) await this.scheduleAlarm(SCREENSHOT_RUNNING_TTL);
     else if (hasTerminal) await this.scheduleAlarm(TERMINAL_TTL);
   }
 

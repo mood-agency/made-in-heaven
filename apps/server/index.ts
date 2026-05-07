@@ -2,9 +2,10 @@
 import { Hono } from 'hono';
 import { app } from './app.js';
 import { createDbD1 } from './db/d1.js';
-import { urls } from './db/schema/index.js';
+import { urls, analyses } from './db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
-import { analyzeUrl } from './services/pagespeed.js';
+import { runPsiAndInsert } from './services/pagespeed.js';
+import { captureScreenshotsAndUpdate } from './services/screenshot-pipeline.js';
 import type { Variables } from './types.js';
 import { QueueStateDO } from './queue-state-do.js';
 import type { BrowserWorker } from '@cloudflare/playwright';
@@ -12,16 +13,21 @@ import type { BrowserWorker } from '@cloudflare/playwright';
 export { QueueStateDO };
 
 type AnalysisMessage = { urlId: number; urlStr: string };
+type ScreenshotMessage = { urlId: number; urlStr: string; mobileId: number; desktopId: number };
 
 type Env = {
   DB: D1Database;
   PAGESPEED_API_KEY: string;
+  SCREENSHOTS_ENABLED: string;
   ASSETS: Fetcher;
   ANALYSIS_QUEUE: Queue<AnalysisMessage>;
+  SCREENSHOT_QUEUE: Queue<ScreenshotMessage>;
   QUEUE_STATE: DurableObjectNamespace;
   BROWSER: BrowserWorker;
-  SCREENSHOTS: R2Bucket;
+  STORAGE: R2Bucket;
 };
+
+const screenshotsEnabled = (env: Env) => env.SCREENSHOTS_ENABLED === 'true';
 
 const CRON_TO_INTERVAL: Record<string, string> = {
   '0 9 * * *': 'daily',
@@ -80,13 +86,34 @@ worker.post('/api/queue/clear', async (c) => {
 
 worker.get('/api/screenshots/*', async (c) => {
   const key = decodeURIComponent(c.req.path.replace('/api/screenshots/', ''));
-  const obj = await c.env.SCREENSHOTS.get(key);
+  const obj = await c.env.STORAGE.get(key);
   if (!obj) return c.notFound();
   return new Response(obj.body, {
     headers: {
       'Content-Type': obj.httpMetadata?.contentType ?? 'image/png',
       'Cache-Control': 'public, max-age=31536000, immutable',
       'ETag': obj.httpEtag,
+    },
+  });
+});
+
+worker.get('/api/analyses/:id/raw', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  const db = c.var.db;
+  const [row] = await db
+    .select({ rawKey: analyses.rawKey })
+    .from(analyses)
+    .where(eq(analyses.id, id))
+    .limit(1);
+  if (!row?.rawKey) return c.notFound();
+  const obj = await c.env.STORAGE.get(row.rawKey);
+  if (!obj) return c.notFound();
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Encoding': 'gzip',
+      'Cache-Control': 'private, max-age=300',
     },
   });
 });
@@ -123,29 +150,71 @@ export default {
     console.log(`[scheduler] ${interval}: enqueued ${targetUrls.length} URLs`);
   },
 
-  async queue(batch: MessageBatch<AnalysisMessage>, env: Env): Promise<void> {
+  async queue(
+    batch: MessageBatch<AnalysisMessage | ScreenshotMessage>,
+    env: Env,
+  ): Promise<void> {
     const db = createDbD1(env.DB);
     const qsStub = getQueueStateStub(env);
-    await Promise.all(
-      batch.messages.map(async (msg) => {
+
+    if (batch.queue === 'mih-analysis') {
+      for (const msg of batch.messages as Message<AnalysisMessage>[]) {
         if (await qsStub.isCancelled(msg.body.urlId)) {
           msg.ack();
-          return;
+          continue;
         }
         try {
           await qsStub.markRunning(msg.body.urlId);
-          const screenshotEnv = env.BROWSER && env.SCREENSHOTS
-            ? { BROWSER: env.BROWSER, SCREENSHOTS: env.SCREENSHOTS }
-            : undefined;
-          await analyzeUrl(db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY, screenshotEnv);
+          const { mobileId, desktopId } = await runPsiAndInsert(
+            db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY, env.STORAGE,
+          );
           await qsStub.markDone(msg.body.urlId);
+
+          if (screenshotsEnabled(env) && env.BROWSER && env.STORAGE) {
+            await qsStub.markScreenshotQueued(msg.body.urlId);
+            await env.SCREENSHOT_QUEUE.send({
+              urlId: msg.body.urlId,
+              urlStr: msg.body.urlStr,
+              mobileId,
+              desktopId,
+            });
+          }
+
           msg.ack();
         } catch (err) {
-          console.error(`[queue] error urlId=${msg.body.urlId}:`, err);
+          console.error(`[analysis-queue] error urlId=${msg.body.urlId}:`, err);
           await qsStub.markFailed(msg.body.urlId, String(err));
           msg.retry();
         }
-      }),
-    );
+      }
+    } else if (batch.queue === 'mih-screenshots') {
+      const msg = (batch.messages as Message<ScreenshotMessage>[])[0];
+      if (!screenshotsEnabled(env)) {
+        msg.ack();
+        return;
+      }
+      if (await qsStub.isCancelled(msg.body.urlId)) {
+        msg.ack();
+        return;
+      }
+      try {
+        await qsStub.markScreenshotRunning(msg.body.urlId);
+        await captureScreenshotsAndUpdate(
+          db,
+          msg.body.urlId,
+          msg.body.urlStr,
+          msg.body.mobileId,
+          msg.body.desktopId,
+          { BROWSER: env.BROWSER, STORAGE: env.STORAGE },
+        );
+        await qsStub.markScreenshotDone(msg.body.urlId);
+        msg.ack();
+      } catch (err) {
+        console.error(`[screenshot-queue] error urlId=${msg.body.urlId}:`, err);
+        await qsStub.markScreenshotFailed(msg.body.urlId, String(err));
+        const is429 = String(err).includes('429') || String(err).includes('Rate limit');
+        msg.retry(is429 ? { delaySeconds: 300 } : undefined);
+      }
+    }
   },
-} satisfies ExportedHandler<Env, AnalysisMessage>;
+} satisfies ExportedHandler<Env, AnalysisMessage | ScreenshotMessage>;

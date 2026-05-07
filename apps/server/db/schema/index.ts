@@ -33,6 +33,8 @@ export const analyses = sqliteTable('analyses', {
   screenshotViewKey: text('screenshot_view_key'),
   diffKey: text('diff_key'),
   diffPercent: real('diff_percent'),
+  rawKey: text('raw_key'),
+  rawBytes: integer('raw_bytes'),
 }, (t) => [
   index('analyses_url_id_idx').on(t.urlId),
 ]);
