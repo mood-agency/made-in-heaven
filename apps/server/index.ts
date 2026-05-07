@@ -158,35 +158,38 @@ export default {
     const qsStub = getQueueStateStub(env);
 
     if (batch.queue === 'mih-analysis') {
-      for (const msg of batch.messages as Message<AnalysisMessage>[]) {
-        if (await qsStub.isCancelled(msg.body.urlId)) {
-          msg.ack();
-          continue;
-        }
-        try {
-          await qsStub.markRunning(msg.body.urlId);
-          const { mobileId, desktopId } = await runPsiAndInsert(
-            db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY, env.STORAGE,
-          );
-          await qsStub.markDone(msg.body.urlId);
-
-          if (screenshotsEnabled(env) && env.BROWSER && env.STORAGE) {
-            await qsStub.markScreenshotQueued(msg.body.urlId);
-            await env.SCREENSHOT_QUEUE.send({
-              urlId: msg.body.urlId,
-              urlStr: msg.body.urlStr,
-              mobileId,
-              desktopId,
-            });
+      await Promise.allSettled(
+        (batch.messages as Message<AnalysisMessage>[]).map(async (msg) => {
+          if (await qsStub.isCancelled(msg.body.urlId)) {
+            msg.ack();
+            return;
           }
+          try {
+            await qsStub.markRunning(msg.body.urlId);
+            const { mobileId, desktopId } = await runPsiAndInsert(
+              db, msg.body.urlId, msg.body.urlStr, env.PAGESPEED_API_KEY, env.STORAGE,
+            );
+            await qsStub.markDone(msg.body.urlId);
 
-          msg.ack();
-        } catch (err) {
-          console.error(`[analysis-queue] error urlId=${msg.body.urlId}:`, err);
-          await qsStub.markFailed(msg.body.urlId, String(err));
-          msg.retry();
-        }
-      }
+            if (screenshotsEnabled(env) && env.BROWSER && env.STORAGE) {
+              await qsStub.markScreenshotQueued(msg.body.urlId);
+              await env.SCREENSHOT_QUEUE.send({
+                urlId: msg.body.urlId,
+                urlStr: msg.body.urlStr,
+                mobileId,
+                desktopId,
+              });
+            }
+
+            msg.ack();
+          } catch (err) {
+            console.error(`[analysis-queue] error urlId=${msg.body.urlId}:`, err);
+            await qsStub.markFailed(msg.body.urlId, String(err));
+            const is429 = String(err).includes('429') || String(err).includes('Rate limit');
+            msg.retry(is429 ? { delaySeconds: 60 } : undefined);
+          }
+        }),
+      );
     } else if (batch.queue === 'mih-analysis-dlq') {
       for (const msg of batch.messages as Message<AnalysisMessage>[]) {
         console.error(`[dlq] mih-analysis unrecoverable urlId=${msg.body.urlId}`);
