@@ -2,6 +2,10 @@ import type { Db } from '../types.js';
 import { analyses, urls, settings } from '../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 
+interface R2Storage {
+  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string; contentEncoding?: string } }): Promise<unknown>;
+}
+
 const PSI_URL = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 
 interface LighthouseResult {
@@ -74,7 +78,7 @@ export async function runPsiAndInsert(
   urlId: number,
   urlStr: string,
   envApiKey: string | undefined,
-  storage: R2Bucket,
+  storage: R2Storage,
 ): Promise<{ mobileId: number; desktopId: number }> {
   const apiKey = await getApiKey(db, envApiKey);
   const ids: Partial<Record<'mobile' | 'desktop', number>> = {};
@@ -124,5 +128,5 @@ export async function analyzeUrl(
   urlStr: string,
   envApiKey?: string,
 ): Promise<void> {
-  await runPsiAndInsert(db, urlId, urlStr, envApiKey, undefined as unknown as R2Bucket);
+  await runPsiAndInsert(db, urlId, urlStr, envApiKey, undefined as unknown as R2Storage);
 }
