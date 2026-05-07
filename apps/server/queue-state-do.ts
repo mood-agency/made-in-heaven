@@ -17,7 +17,8 @@ type WsMsg =
   | { type: 'bulk_update'; entries: QueueEntry[] }
   | { type: 'purge'; urlIds: number[] };
 
-const TERMINAL_TTL = 5 * 60 * 1000;
+const TERMINAL_TTL = 24 * 60 * 60 * 1000;
+const QUEUED_TTL = 10 * 60 * 1000;
 const RUNNING_TTL = 60_000;
 const SCREENSHOT_RUNNING_TTL = 5 * 60 * 1000;
 const TERMINAL_STATUSES = new Set<QueueEntry['status']>(['done', 'failed', 'cancelled']);
@@ -47,6 +48,7 @@ export class QueueStateDO extends DurableObject {
     }
     await this.ctx.storage.put(batch);
     this.broadcast({ type: 'bulk_update', entries: newEntries });
+    await this.scheduleAlarm(QUEUED_TTL);
   }
 
   async markRunning(urlId: number): Promise<void> {
@@ -217,6 +219,7 @@ export class QueueStateDO extends DurableObject {
     const runningCutoff = now - RUNNING_TTL;
     const screenshotRunningCutoff = now - SCREENSHOT_RUNNING_TTL;
 
+    const queuedCutoff = now - QUEUED_TTL;
     const purgedIds: number[] = [];
     const keysToDelete: string[] = [];
     const timedOut: QueueEntry[] = [];
@@ -231,6 +234,14 @@ export class QueueStateDO extends DurableObject {
         purgedIds.push(urlId);
         keysToDelete.push(`status:${urlId}`);
         this.state.delete(urlId);
+        continue;
+      }
+
+      if (entry.status === 'queued' && entry.updatedAt < queuedCutoff) {
+        const failed: QueueEntry = { ...entry, status: 'failed', updatedAt: now, error: 'Queue timeout: never consumed' };
+        this.state.set(urlId, failed);
+        timedOutBatch[`status:${urlId}`] = failed;
+        timedOut.push(failed);
         continue;
       }
 
@@ -270,6 +281,7 @@ export class QueueStateDO extends DurableObject {
       this.broadcast({ type: 'bulk_update', entries: timedOut });
     }
 
+    const hasQueued = [...this.state.values()].some((e) => e.status === 'queued');
     const hasRunning = [...this.state.values()].some((e) => e.status === 'running');
     const hasScreenshotRunning = [...this.state.values()].some((e) => e.screenshotState === 'running');
     const hasTerminal = [...this.state.values()].some((e) => {
@@ -281,6 +293,7 @@ export class QueueStateDO extends DurableObject {
     if (hasRunning) await this.scheduleAlarm(RUNNING_TTL);
     else if (hasScreenshotRunning) await this.scheduleAlarm(SCREENSHOT_RUNNING_TTL);
     else if (hasTerminal) await this.scheduleAlarm(TERMINAL_TTL);
+    else if (hasQueued) await this.scheduleAlarm(QUEUED_TTL);
   }
 
   private broadcast(msg: WsMsg) {

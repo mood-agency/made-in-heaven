@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
 import type { QueueEntry } from '@/api';
 import { useDndRow } from '@/components/dnd-row-context';
@@ -40,13 +41,14 @@ export function QueueStatusBadge({ entry }: { entry: QueueEntry | undefined }) {
     );
   if (entry.status === 'failed')
     return (
-      <Badge
-        variant="destructive"
-        className="text-xs shrink-0 cursor-help"
-        title={entry.error ?? 'Error desconocido'}
-      >
-        Error
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="destructive" className="text-xs shrink-0 cursor-help">Error</Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs break-words">
+          {entry.error ?? 'Error desconocido'}
+        </TooltipContent>
+      </Tooltip>
     );
   if (entry.status === 'done')
     return <Badge variant="outline" className="text-xs shrink-0 text-green-600 border-green-200">Listo</Badge>;

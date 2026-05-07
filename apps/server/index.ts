@@ -187,9 +187,16 @@ export default {
           msg.retry();
         }
       }
-    } else if (batch.queue === 'mih-analysis-dlq' || batch.queue === 'mih-screenshots-dlq') {
-      for (const msg of batch.messages) {
-        console.error(`[dlq] ${batch.queue} unrecoverable message:`, JSON.stringify(msg.body));
+    } else if (batch.queue === 'mih-analysis-dlq') {
+      for (const msg of batch.messages as Message<AnalysisMessage>[]) {
+        console.error(`[dlq] mih-analysis unrecoverable urlId=${msg.body.urlId}`);
+        await qsStub.markFailed(msg.body.urlId, 'Exhausted all retries');
+        msg.ack();
+      }
+    } else if (batch.queue === 'mih-screenshots-dlq') {
+      for (const msg of batch.messages as Message<ScreenshotMessage>[]) {
+        console.error(`[dlq] mih-screenshots unrecoverable urlId=${msg.body.urlId}`);
+        await qsStub.markScreenshotFailed(msg.body.urlId, 'Exhausted all retries');
         msg.ack();
       }
     } else if (batch.queue === 'mih-screenshots') {
