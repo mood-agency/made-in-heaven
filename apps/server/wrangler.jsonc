@@ -1,0 +1,85 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "made-in-heaven-server",
+  "main": "index.ts",
+  "compatibility_date": "2026-04-22",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "build": {
+    "command": "echo 'assets pre-built by CI'"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "made-in-heaven",
+      "database_id": "${D1_DATABASE_ID}",
+      "migrations_dir": "./drizzle/migrations",
+      "remote": true
+    }
+  ],
+
+  "triggers": {
+    "crons": ["0 9 * * *"]
+  },
+
+  "assets": {
+    "directory": "../client/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  "queues": {
+    "producers": [
+      { "binding": "ANALYSIS_QUEUE",   "queue": "mih-analysis" },
+      { "binding": "SCREENSHOT_QUEUE", "queue": "mih-screenshots" }
+    ],
+    "consumers": [
+      {
+        "queue": "mih-analysis",
+        "max_batch_size": 5,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "dead_letter_queue": "mih-analysis-dlq"
+      },
+      {
+        "queue": "mih-screenshots",
+        "max_batch_size": 1,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "dead_letter_queue": "mih-screenshots-dlq"
+      }
+    ]
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "QUEUE_STATE", "class_name": "QueueStateDO" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["QueueStateDO"] }
+  ],
+
+  "browser": {
+    "binding": "BROWSER"
+  },
+
+  "r2_buckets": [
+    {
+      "binding": "STORAGE",
+      "bucket_name": "mih-assets"
+    }
+  ],
+
+  "vars": {
+    "SCREENSHOTS_ENABLED": "false"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

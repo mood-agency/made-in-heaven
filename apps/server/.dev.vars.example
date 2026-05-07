@@ -1,0 +1,4 @@
+# Cloudflare Workers local dev (pnpm dev:worker)
+# Copy to .dev.vars — never commit .dev.vars
+PAGESPEED_API_KEY=AIzaSy...
+D1_DATABASE_ID=your-d1-database-id

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch index.node.ts",
     "dev:worker": "wrangler dev",
-    "deploy": "CI=true wrangler deploy",
+    "deploy": "wrangler deploy",
     "types": "wrangler types",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
