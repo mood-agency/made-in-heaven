@@ -13,7 +13,6 @@
     {
       "binding": "DB",
       "database_name": "made-in-heaven",
-      "database_id": "${D1_DATABASE_ID}",
       "migrations_dir": "./drizzle/migrations",
       "remote": true
     }
