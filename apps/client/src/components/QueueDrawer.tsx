@@ -42,15 +42,14 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const cancelled = entries.filter((e) => e.status === 'cancelled').length;
   const total = entries.length;
 
-  const prevSizeRef = useRef(0);
+  const prevTotalRef = useRef(0);
   useEffect(() => {
-    const size = queueState.size;
-    if (size > 0 && size > prevSizeRef.current) {
+    if (prevTotalRef.current === 0 && total > 0) {
       setOpen(true);
       setMinimized(false);
     }
-    prevSizeRef.current = size;
-  }, [queueState.size]);
+    prevTotalRef.current = total;
+  }, [total]);
 
   if (total === 0 && !open) return null;
 
@@ -96,6 +95,9 @@ export default function QueueDrawer({ queueState, urls }: Props) {
         {/* Portal without overlay — custom bottom-right positioning */}
         <DrawerPortal>
           <DrawerPrimitive.Content
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+            onFocusOutside={(e) => e.preventDefault()}
             className={cn(
               'fixed z-50 flex flex-col bg-popover text-sm text-popover-foreground',
               'bottom-0 right-6 w-96 max-h-[70vh]',
