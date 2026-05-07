@@ -21,6 +21,7 @@ A web performance monitoring dashboard that tracks [Google PageSpeed Insights](h
 | Backend | Hono, Drizzle ORM, Zod |
 | Database | Cloudflare D1 (prod) / libsql SQLite (local) |
 | Queue | Cloudflare Queues |
+| Storage | Cloudflare R2 |
 | Runtime | Cloudflare Workers (prod) / Node.js (local) |
 | Monorepo | Turborepo + pnpm |
 
@@ -49,14 +50,13 @@ made-in-heaven/
 pnpm install
 ```
 
-Create `apps/server/.env`:
+Copy the env example and fill in your values:
 
-```env
-PAGESPEED_API_KEY=your_api_key_here
-PORT=3001
+```bash
+cp apps/server/.env.example apps/server/.env
 ```
 
-### Run
+### Run (Node.js)
 
 ```bash
 # Start backend (port 3001) and frontend (port 5173) in watch mode
@@ -64,6 +64,14 @@ pnpm dev
 ```
 
 Then open [http://localhost:5173](http://localhost:5173).
+
+### Run (Wrangler Workers runtime)
+
+```bash
+cp apps/server/.dev.vars.example apps/server/.dev.vars
+# Edit .dev.vars with your values
+pnpm dev:worker
+```
 
 ### Database migrations
 
@@ -77,7 +85,7 @@ pnpm db:studio     # Open Drizzle Studio
 
 ### Prerequisites
 
-- A Cloudflare account with Workers and D1 enabled
+- A Cloudflare account with Workers, D1, R2, and Queues enabled
 - `wrangler` CLI authenticated (`wrangler login`)
 
 ### 1. Create Cloudflare resources
@@ -86,39 +94,61 @@ pnpm db:studio     # Open Drizzle Studio
 # D1 database
 wrangler d1 create made-in-heaven
 
+# R2 bucket
+wrangler r2 bucket create mih-assets
+
 # Queues
 wrangler queues create mih-analysis
 wrangler queues create mih-analysis-dlq
+wrangler queues create mih-screenshots
+wrangler queues create mih-screenshots-dlq
 ```
 
-### 2. Configure wrangler
-
-```bash
-cp apps/server/wrangler.example.jsonc apps/server/wrangler.jsonc
-```
-
-Edit `apps/server/wrangler.jsonc` and replace `YOUR_D1_DATABASE_ID` with the ID returned in the previous step.
-
-### 3. Add secrets
+### 2. Add secrets
 
 ```bash
 cd apps/server
 wrangler secret put PAGESPEED_API_KEY
 ```
 
-### 4. Apply migrations and deploy
+### 3. Apply migrations and deploy
 
 ```bash
 pnpm db:migrate:remote
 pnpm deploy
 ```
 
+### Git-based deployment (Cloudflare CI)
+
+Configure the following in the Cloudflare Workers dashboard under **Settings > Build**:
+
+| Field | Value |
+|---|---|
+| Build command | `pnpm --filter @mih/client build` |
+| Deploy command | `pnpm --filter @mih/server run deploy` |
+| Root path | *(empty)* |
+
 ## Environment Variables
+
+### Local (`.env` — Node.js dev server)
 
 | Variable | Required | Description |
 |---|---|---|
 | `PAGESPEED_API_KEY` | Yes | Google PageSpeed Insights API key |
 | `PORT` | No | Local server port (default: `3001`) |
+| `D1_DATABASE_ID` | No | D1 database ID for local Node.js dev |
+
+### Local (`.dev.vars` — Wrangler dev server)
+
+| Variable | Required | Description |
+|---|---|---|
+| `PAGESPEED_API_KEY` | Yes | Google PageSpeed Insights API key |
+
+### Production secrets (`wrangler secret put`)
+
+| Variable | Description |
+|---|---|
+| `PAGESPEED_API_KEY` | Google PageSpeed Insights API key |
 
 ## Available Scripts
 

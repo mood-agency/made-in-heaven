@@ -187,6 +187,11 @@ export default {
           msg.retry();
         }
       }
+    } else if (batch.queue === 'mih-analysis-dlq' || batch.queue === 'mih-screenshots-dlq') {
+      for (const msg of batch.messages) {
+        console.error(`[dlq] ${batch.queue} unrecoverable message:`, JSON.stringify(msg.body));
+        msg.ack();
+      }
     } else if (batch.queue === 'mih-screenshots') {
       const msg = (batch.messages as Message<ScreenshotMessage>[])[0];
       if (!screenshotsEnabled(env)) {
