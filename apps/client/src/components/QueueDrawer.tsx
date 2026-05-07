@@ -3,7 +3,7 @@ import { Drawer as DrawerPrimitive } from 'vaul';
 import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, Url } from '@/api';
-import { useCancelQueue, useAnalyze, useClearFinished } from '@/api';
+import { useCancelQueue, useAnalyze, useAnalyzeSelected, useClearFinished } from '@/api';
 import { Drawer, DrawerPortal, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import {
   Tooltip,
@@ -28,6 +28,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const cancelQueue = useCancelQueue();
   const clearFinished = useClearFinished();
   const analyze = useAnalyze();
+  const analyzeSelected = useAnalyzeSelected();
 
   const entries = [...queueState.values()]
     .filter((e) => !((e.status === 'done' || e.status === 'cancelled') && dismissed.has(e.urlId)))
@@ -114,6 +115,19 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                 </DrawerTitle>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                {failed > 0 && (
+                  <button
+                    onClick={() => {
+                      const ids = entries.filter((e) => e.status === 'failed').map((e) => e.urlId);
+                      analyzeSelected.mutate(ids);
+                    }}
+                    disabled={analyzeSelected.isPending}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted hover:text-blue-500 transition-colors"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Reintentar fallidos
+                  </button>
+                )}
                 {(done > 0 || failed > 0) && queued === 0 && running === 0 && (
                   <button
                     onClick={() => clearFinished.mutate()}
@@ -210,32 +224,35 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                           <RotateCcw className="size-3.5" />
                         </button>
                       </span>
+                    ) : entry.status === 'failed' ? (
+                      <span className="relative shrink-0 w-16 flex items-center justify-end">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-xs text-destructive cursor-help underline decoration-dotted group-hover:opacity-0 group-hover:pointer-events-none transition-opacity">Error</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <p className="max-w-xs break-words">{entry.error ?? 'Error desconocido'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <button
+                          onClick={() => analyze.mutate(entry.urlId)}
+                          disabled={analyze.isPending}
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-blue-500"
+                          title="Reintentar"
+                        >
+                          <RotateCcw className="size-3.5" />
+                        </button>
+                      </span>
                     ) : (
-                      <span className={cn('text-xs shrink-0', {
-                        'text-destructive': entry.status === 'failed',
-                      })}>
-                        {entry.status === 'running' && (
-                          <span className="relative shrink-0 w-16 flex items-center justify-end">
-                            <span className="text-xs text-blue-600 group-hover:opacity-0 transition-opacity">Analizando…</span>
-                            <button
-                              onClick={() => cancelQueue.mutate({ urlIds: [entry.urlId], includeRunning: true })}
-                              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                              title="Cancelar"
-                            >
-                              <X className="size-3.5" />
-                            </button>
-                          </span>
-                        )}
-                        {entry.status === 'failed' && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-help underline decoration-dotted">Error</span>
-                            </TooltipTrigger>
-                            <TooltipContent side="left">
-                              <p className="max-w-xs break-words">{entry.error ?? 'Error desconocido'}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                      <span className="relative shrink-0 w-20 flex items-center justify-end">
+                        <span className="text-xs text-blue-600 group-hover:opacity-0 transition-opacity">Analizando…</span>
+                        <button
+                          onClick={() => cancelQueue.mutate({ urlIds: [entry.urlId], includeRunning: true })}
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          title="Cancelar"
+                        >
+                          <X className="size-3.5" />
+                        </button>
                       </span>
                     )}
                   </div>
