@@ -13,8 +13,8 @@ const scoreBucketFilter: FilterFn<Url> = (row, columnId, filterValue: string[]) 
   const score = row.getValue<number>(columnId);
   if (!filterValue || filterValue.length === 0) return true;
   return filterValue.some((bucket) => {
-    if (bucket === 'good') return score >= 70;
-    if (bucket === 'needs-improvement') return score >= 50 && score < 70;
+    if (bucket === 'good') return score >= 90;
+    if (bucket === 'needs-improvement') return score >= 50 && score < 90;
     if (bucket === 'poor') return score >= 0 && score < 50;
     return false;
   });

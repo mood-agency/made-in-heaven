@@ -126,8 +126,8 @@ export function DataTableFacetedFilter<TData, TValue>({
 // ─── Score bucket filter ─────────────────────────────────────────────────────
 
 const SCORE_BUCKETS = [
-  { value: 'good', label: 'Bueno', range: '70–100', className: 'text-green-600' },
-  { value: 'needs-improvement', label: 'Mejorable', range: '50–69', className: 'text-amber-600' },
+  { value: 'good', label: 'Bueno', range: '90–100', className: 'text-green-600' },
+  { value: 'needs-improvement', label: 'Mejorable', range: '50–89', className: 'text-amber-600' },
   { value: 'poor', label: 'Bajo', range: '0–49', className: 'text-red-600' },
 ] as const;
 
