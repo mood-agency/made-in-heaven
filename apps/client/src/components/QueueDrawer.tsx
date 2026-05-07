@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
-import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban, RotateCcw } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, X, Ban, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, Url } from '@/api';
-import { useCancelQueue, useAnalyze } from '@/api';
+import { useCancelQueue, useAnalyze, useClearFinished } from '@/api';
 import { Drawer, DrawerPortal, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import {
   Tooltip,
@@ -26,6 +26,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
   const [minimized, setMinimized] = useState(false);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const cancelQueue = useCancelQueue();
+  const clearFinished = useClearFinished();
   const analyze = useAnalyze();
 
   const entries = [...queueState.values()]
@@ -113,6 +114,16 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                 </DrawerTitle>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                {(done > 0 || failed > 0) && queued === 0 && running === 0 && (
+                  <button
+                    onClick={() => clearFinished.mutate()}
+                    disabled={clearFinished.isPending}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Limpiar
+                  </button>
+                )}
                 {(queued > 0 || running > 0) && (
                   <button
                     onClick={() => cancelQueue.mutate({ includeRunning: true })}

@@ -78,6 +78,12 @@ worker.post('/api/queue/cancel', async (c) => {
   return c.json({ cancelled });
 });
 
+worker.post('/api/queue/clear-finished', async (c) => {
+  const stub = getQueueStateStub(c.env);
+  const cleared = await stub.clearFinished();
+  return c.json({ cleared });
+});
+
 worker.post('/api/queue/clear', async (c) => {
   const stub = getQueueStateStub(c.env);
   const cleared = await stub.clearAll();

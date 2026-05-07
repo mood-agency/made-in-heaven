@@ -175,6 +175,17 @@ export function useCancelQueue() {
   });
 }
 
+export function useClearFinished() {
+  return useMutation({
+    mutationFn: async () => {
+      const res = await throwIfError(
+        await fetch('/api/queue/clear-finished', { method: 'POST' }),
+      );
+      return res.json() as Promise<{ cleared: number }>;
+    },
+  });
+}
+
 export function useQueueState(): Map<number, QueueEntry> {
   const qc = useQueryClient();
   const [state, setState] = useState<Map<number, QueueEntry>>(new Map());

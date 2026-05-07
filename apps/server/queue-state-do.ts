@@ -185,6 +185,19 @@ export class QueueStateDO extends DurableObject {
     return [...this.state.values()];
   }
 
+  async clearFinished(): Promise<number> {
+    await this.ensureLoaded();
+    const ids: number[] = [];
+    for (const [id, entry] of this.state) {
+      if (entry.status === 'done' || entry.status === 'failed') ids.push(id);
+    }
+    if (ids.length === 0) return 0;
+    await this.ctx.storage.delete(ids.map((id) => `status:${id}`));
+    for (const id of ids) this.state.delete(id);
+    this.broadcast({ type: 'purge', urlIds: ids });
+    return ids.length;
+  }
+
   async clearAll(): Promise<number> {
     await this.ensureLoaded();
     const ids = [...this.state.keys()];
