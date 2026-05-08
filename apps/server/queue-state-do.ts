@@ -53,7 +53,14 @@ export class QueueStateDO extends DurableObject {
 
   async markRunning(urlId: number): Promise<void> {
     await this.ensureLoaded();
-    const entry: QueueEntry = { urlId, status: 'running', updatedAt: Date.now() };
+    const existing = this.state.get(urlId);
+    const entry: QueueEntry = {
+      urlId, status: 'running', updatedAt: Date.now(),
+      error: existing?.error,
+      screenshotState: existing?.screenshotState,
+      screenshotError: existing?.screenshotError,
+      screenshotUpdatedAt: existing?.screenshotUpdatedAt,
+    };
     this.state.set(urlId, entry);
     await this.ctx.storage.put(`status:${urlId}`, entry);
     this.broadcast({ type: 'update', entry });
@@ -80,8 +87,12 @@ export class QueueStateDO extends DurableObject {
     await this.ensureLoaded();
     const existing = this.state.get(urlId);
     if (existing?.status === 'cancelled') return;
+    // When the DLQ exhausts retries, preserve the real error from the last attempt
+    const effectiveError = (error === 'Exhausted all retries' && existing?.error)
+      ? `${existing.error} (agotados todos los reintentos)`
+      : error;
     const entry: QueueEntry = {
-      urlId, status: 'failed', updatedAt: Date.now(), error,
+      urlId, status: 'failed', updatedAt: Date.now(), error: effectiveError,
       screenshotState: existing?.screenshotState,
       screenshotError: existing?.screenshotError,
       screenshotUpdatedAt: existing?.screenshotUpdatedAt,

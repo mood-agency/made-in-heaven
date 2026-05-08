@@ -32,7 +32,8 @@ class QueueStateNode {
   }
 
   markRunning(urlId: number) {
-    const entry: QueueEntry = { urlId, status: 'running', updatedAt: Date.now() };
+    const existing = this.state.get(urlId);
+    const entry: QueueEntry = { urlId, status: 'running', updatedAt: Date.now(), error: existing?.error };
     this.state.set(urlId, entry);
     this.broadcast({ type: 'update', entry });
     setTimeout(() => {

@@ -189,7 +189,11 @@ export default function QueueDrawer({ queueState, urls }: Props) {
 
                     <div className="flex flex-col min-w-0 flex-1">
                       <span className="text-sm truncate">{name}</span>
-                      {href && <span className="text-xs text-muted-foreground truncate">{href}</span>}
+                      {entry.status === 'running' && entry.error ? (
+                        <span className="text-xs text-amber-500 truncate" title={entry.error}>Reintentando…</span>
+                      ) : (
+                        href && <span className="text-xs text-muted-foreground truncate">{href}</span>
+                      )}
                     </div>
 
                     {entry.status === 'done' ? (
@@ -227,10 +231,10 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                         </button>
                       </span>
                     ) : entry.status === 'failed' ? (
-                      <span className="relative shrink-0 w-16 flex items-center justify-end">
+                      <span className="shrink-0 flex items-center gap-1">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="text-xs text-destructive cursor-help underline decoration-dotted group-hover:opacity-0 group-hover:pointer-events-none transition-opacity">Error</span>
+                            <span className="text-xs text-destructive cursor-help underline decoration-dotted">Error</span>
                           </TooltipTrigger>
                           <TooltipContent side="left">
                             <p className="max-w-xs break-words">{entry.error ?? 'Error desconocido'}</p>
@@ -239,7 +243,7 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                         <button
                           onClick={() => analyze.mutate(entry.urlId)}
                           disabled={analyze.isPending}
-                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-blue-500"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-blue-500"
                           title="Reintentar"
                         >
                           <RotateCcw className="size-3.5" />
