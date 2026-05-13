@@ -256,12 +256,22 @@ export function useBulkImport() {
 
 // ─── Analyses ────────────────────────────────────────────────────────────────
 
-export function useAnalyses(urlId: number, strategy?: 'mobile' | 'desktop') {
+interface UseAnalysesOptions {
+  strategy?: 'mobile' | 'desktop';
+  startDate?: string;
+  endDate?: string;
+}
+
+export function useAnalyses(urlId: number, options: UseAnalysesOptions = {}) {
+  const { strategy, startDate, endDate } = options;
   return useQuery<Analysis[]>({
-    queryKey: ['analyses', urlId, strategy],
+    queryKey: ['analyses', urlId, strategy, startDate, endDate],
     queryFn: async () => {
-      const query: Record<string, string> = { limit: '60' };
-      if (strategy) query.strategy = strategy;
+      const query: Record<string, string> = {};
+      if (!startDate && !endDate) query.limit = '60';
+      if (strategy)  query.strategy = strategy;
+      if (startDate) query.startDate = startDate;
+      if (endDate)   query.endDate = endDate;
       const res = await throwIfError(
         await rpc.api.analyses[':urlId'].$get({ param: { urlId: String(urlId) }, query }),
       );

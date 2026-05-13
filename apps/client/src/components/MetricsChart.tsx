@@ -39,7 +39,7 @@ export function MetricChart({ mobile, desktop, metric }: Props) {
   const toMap = (list: Analysis[]) =>
     new Map(
       [...list].reverse().map((a) => [
-        a.analyzedAt ? new Date(a.analyzedAt).toLocaleDateString() : '',
+        a.analyzedAt ? new Date(a.analyzedAt).toISOString().slice(0, 10) : '',
         a[metric.key] as number | null,
       ]),
     );
@@ -48,10 +48,11 @@ export function MetricChart({ mobile, desktop, metric }: Props) {
   const desktopMap = toMap(desktop);
   const dates = [...new Set([...mobileMap.keys(), ...desktopMap.keys()])].sort();
 
-  const data = dates.map((date) => ({
-    date,
-    mobile: mobileMap.get(date) ?? null,
-    desktop: desktopMap.get(date) ?? null,
+  const data = dates.map((isoDate) => ({
+    date: isoDate,
+    displayDate: isoDate ? new Date(isoDate + 'T12:00:00').toLocaleDateString() : '',
+    mobile: mobileMap.get(isoDate) ?? null,
+    desktop: desktopMap.get(isoDate) ?? null,
   }));
 
   const chartConfig = {
@@ -69,7 +70,7 @@ export function MetricChart({ mobile, desktop, metric }: Props) {
         <ResponsiveContainer>
           <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
+            <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} tickLine={false} />
             <YAxis tick={{ fontSize: 10 }} tickLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />

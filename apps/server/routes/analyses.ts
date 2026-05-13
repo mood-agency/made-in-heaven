@@ -8,6 +8,8 @@ import { eq, and, desc, inArray, gte, lte } from 'drizzle-orm';
 const querySchema = z.object({
   strategy: z.enum(['mobile', 'desktop']).optional(),
   limit: z.string().optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 const exportQuerySchema = z.object({
@@ -167,11 +169,14 @@ const router = new Hono<{ Variables: Variables }>()
   .get('/:urlId', zValidator('query', querySchema), async (c) => {
     const db = c.var.db;
     const urlId = Number(c.req.param('urlId'));
-    const { strategy, limit: limitStr } = c.req.valid('query');
-    const limit = Math.min(Number(limitStr ?? 50), 200);
+    const { strategy, limit: limitStr, startDate, endDate } = c.req.valid('query');
+    const hasDateRange = !!(startDate || endDate);
+    const limit = hasDateRange ? 1000 : Math.min(Number(limitStr ?? 50), 200);
 
     const conditions = [eq(analyses.urlId, urlId)];
     if (strategy) conditions.push(eq(analyses.strategy, strategy as 'mobile' | 'desktop'));
+    if (startDate) conditions.push(gte(analyses.analyzedAt, new Date(`${startDate}T00:00:00.000Z`)));
+    if (endDate)   conditions.push(lte(analyses.analyzedAt, new Date(`${endDate}T23:59:59.999Z`)));
 
     const rows = await db
       .select()

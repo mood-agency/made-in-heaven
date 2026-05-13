@@ -38,7 +38,7 @@ function latestPerDay(analyses: Analysis[]): Analysis[] {
   const seen = new Set<string>();
   return analyses.filter((a) => {
     if (!a.analyzedAt) return false;
-    const day = new Date(a.analyzedAt).toLocaleDateString();
+    const day = new Date(a.analyzedAt).toISOString().slice(0, 10);
     if (seen.has(day)) return false;
     seen.add(day);
     return true;
@@ -380,7 +380,21 @@ export default function UrlDetail() {
   const { data: urls } = useUrls();
   const urlData = urls?.find((u) => u.id === urlId);
 
-  const analysesQ = useAnalyses(urlId);
+  const isoToday = new Date().toISOString().slice(0, 10);
+  function daysAgoISO(n: number) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+  }
+  const { startDate, endDate } = ((): { startDate?: string; endDate?: string } => {
+    if (datePreset === '7d')  return { startDate: daysAgoISO(6),  endDate: isoToday };
+    if (datePreset === '30d') return { startDate: daysAgoISO(29), endDate: isoToday };
+    if (datePreset === '90d') return { startDate: daysAgoISO(89), endDate: isoToday };
+    if (datePreset === 'all') return {};
+    return { startDate: customStart || undefined, endDate: customEnd || undefined };
+  })();
+
+  const analysesQ = useAnalyses(urlId, { startDate, endDate });
   const mobileQ = { ...analysesQ, data: analysesQ.data?.filter((a) => a.strategy === 'mobile') };
   const desktopQ = { ...analysesQ, data: analysesQ.data?.filter((a) => a.strategy === 'desktop') };
   const analyze = useAnalyze();
@@ -397,6 +411,11 @@ export default function UrlDetail() {
   const [editingInfo, setEditingInfo] = useState(false);
   const [localName, setLocalName] = useState('');
   const [localUrl, setLocalUrl] = useState('');
+
+  type DatePreset = '7d' | '30d' | '90d' | 'all' | 'custom';
+  const [datePreset, setDatePreset] = useState<DatePreset>('30d');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   function startEditingInfo() {
     setLocalName(urlData?.name ?? '');
@@ -661,6 +680,46 @@ export default function UrlDetail() {
       </div>
 
       {(mobileQ.isLoading || desktopQ.isLoading) && <Skeleton className="h-48 w-full" />}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(['7d', '30d', '90d', 'all'] as const).map((p) => (
+          <Button
+            key={p}
+            size="sm"
+            variant={datePreset === p ? 'default' : 'outline'}
+            onClick={() => setDatePreset(p)}
+          >
+            {p === 'all' ? 'All time' : p.toUpperCase()}
+          </Button>
+        ))}
+        <Button
+          size="sm"
+          variant={datePreset === 'custom' ? 'default' : 'outline'}
+          onClick={() => setDatePreset('custom')}
+        >
+          Custom
+        </Button>
+        {datePreset === 'custom' && (
+          <>
+            <input
+              type="date"
+              value={customStart}
+              max={customEnd || isoToday}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={customEnd}
+              min={customStart}
+              max={isoToday}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </>
+        )}
+      </div>
 
       {hasHistory && (
         <>
