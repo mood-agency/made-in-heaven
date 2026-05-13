@@ -46,7 +46,10 @@ export class QueueStateDO extends DurableObject {
       this.state.set(entry.urlId, entry);
       batch[`status:${entry.urlId}`] = entry;
     }
-    await this.ctx.storage.put(batch);
+    const batchPairs = Object.entries(batch);
+    for (let i = 0; i < batchPairs.length; i += 128) {
+      await this.ctx.storage.put(Object.fromEntries(batchPairs.slice(i, i + 128)));
+    }
     this.broadcast({ type: 'bulk_update', entries: newEntries });
     await this.scheduleAlarm(QUEUED_TTL);
   }
@@ -180,7 +183,10 @@ export class QueueStateDO extends DurableObject {
       batch[`status:${entry.urlId}`] = cancelled;
       updated.push(cancelled);
     }
-    await this.ctx.storage.put(batch);
+    const cancelPairs = Object.entries(batch);
+    for (let i = 0; i < cancelPairs.length; i += 128) {
+      await this.ctx.storage.put(Object.fromEntries(cancelPairs.slice(i, i + 128)));
+    }
     this.broadcast({ type: 'bulk_update', entries: updated });
     await this.scheduleAlarm(TERMINAL_TTL);
     return toCancel.length;
@@ -203,7 +209,10 @@ export class QueueStateDO extends DurableObject {
       if (entry.status === 'done' || entry.status === 'failed') ids.push(id);
     }
     if (ids.length === 0) return 0;
-    await this.ctx.storage.delete(ids.map((id) => `status:${id}`));
+    const finishedKeys = ids.map((id) => `status:${id}`);
+    for (let i = 0; i < finishedKeys.length; i += 128) {
+      await this.ctx.storage.delete(finishedKeys.slice(i, i + 128));
+    }
     for (const id of ids) this.state.delete(id);
     this.broadcast({ type: 'purge', urlIds: ids });
     return ids.length;
@@ -213,7 +222,10 @@ export class QueueStateDO extends DurableObject {
     await this.ensureLoaded();
     const ids = [...this.state.keys()];
     if (ids.length === 0) return 0;
-    await this.ctx.storage.delete(ids.map((id) => `status:${id}`));
+    const allKeys = ids.map((id) => `status:${id}`);
+    for (let i = 0; i < allKeys.length; i += 128) {
+      await this.ctx.storage.delete(allKeys.slice(i, i + 128));
+    }
     this.state.clear();
     this.broadcast({ type: 'purge', urlIds: ids });
     return ids.length;
