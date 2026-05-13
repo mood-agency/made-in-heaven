@@ -37,3 +37,7 @@ pnpm-debug.log*
 
 # Playwright MCP
 .playwright-mcp/
+
+node-compile-cache
+update-check
+.claude/settings.json

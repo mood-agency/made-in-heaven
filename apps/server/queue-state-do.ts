@@ -308,12 +308,17 @@ export class QueueStateDO extends DurableObject {
     }
 
     if (keysToDelete.length > 0) {
-      await this.ctx.storage.delete(keysToDelete);
+      for (let i = 0; i < keysToDelete.length; i += 128) {
+        await this.ctx.storage.delete(keysToDelete.slice(i, i + 128));
+      }
       this.broadcast({ type: 'purge', urlIds: purgedIds });
     }
 
     if (timedOut.length > 0) {
-      await this.ctx.storage.put(timedOutBatch);
+      const timedOutPairs = Object.entries(timedOutBatch);
+      for (let i = 0; i < timedOutPairs.length; i += 128) {
+        await this.ctx.storage.put(Object.fromEntries(timedOutPairs.slice(i, i + 128)));
+      }
       this.broadcast({ type: 'bulk_update', entries: timedOut });
     }
 
