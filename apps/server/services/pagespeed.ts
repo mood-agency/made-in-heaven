@@ -80,10 +80,6 @@ async function runStrategy(url: string, strategy: 'mobile' | 'desktop', apiKey: 
   return { metrics: extractMetrics(data.lighthouseResult), rawText };
 }
 
-type StrategyResult =
-  | { strategy: 'mobile' | 'desktop'; metrics: ReturnType<typeof extractMetrics>; rawText: string; error?: never }
-  | { strategy: 'mobile' | 'desktop'; error: string; metrics?: never; rawText?: never };
-
 export async function runPsiAndInsert(
   db: Db,
   urlId: number,
@@ -92,39 +88,35 @@ export async function runPsiAndInsert(
   storage: R2Storage,
 ): Promise<{ mobileId: number; desktopId: number }> {
   const apiKey = await getApiKey(db, envApiKey);
-  const results: StrategyResult[] = [];
-
-  for (const strategy of ['mobile', 'desktop'] as const) {
-    try {
-      const { metrics, rawText } = await runStrategy(urlStr, strategy, apiKey);
-      results.push({ strategy, metrics, rawText });
-    } catch (err) {
-      if (isRetriableError(err)) {
-        // Throw before any DB writes so the queue can retry the whole URL cleanly.
-        throw err;
-      }
-      results.push({ strategy, error: String(err) });
-    }
-  }
-
-  // All strategies completed without retriable errors — commit to DB.
   const ids: Partial<Record<'mobile' | 'desktop', number>> = {};
 
-  for (const result of results) {
+  for (const strategy of ['mobile', 'desktop'] as const) {
+    let fetched: { metrics: ReturnType<typeof extractMetrics>; rawText: string } | null = null;
+    let fetchError: string | undefined;
+
+    try {
+      fetched = await runStrategy(urlStr, strategy, apiKey);
+    } catch (err) {
+      // Throw before any DB writes so the queue can retry the whole URL cleanly.
+      if (isRetriableError(err)) throw err;
+      fetchError = String(err);
+    }
+
     const [row] = await db
       .insert(analyses)
       .values(
-        result.metrics
-          ? { urlId, strategy: result.strategy, ...result.metrics }
-          : { urlId, strategy: result.strategy, error: result.error },
+        fetched
+          ? { urlId, strategy, ...fetched.metrics }
+          : { urlId, strategy, error: fetchError },
       )
       .returning({ id: analyses.id });
-    ids[result.strategy] = row.id;
+    ids[strategy] = row.id;
 
-    if (result.rawText) {
+    if (fetched?.rawText) {
       try {
-        const compressed = await gzip(result.rawText);
-        const rawKey = `psi-raw/${urlId}/${row.id}-${result.strategy}.json.gz`;
+        const compressed = await gzip(fetched.rawText);
+        fetched = null; // release rawText before R2 write
+        const rawKey = `psi-raw/${urlId}/${row.id}-${strategy}.json.gz`;
         await storage.put(rawKey, compressed, {
           httpMetadata: { contentType: 'application/json', contentEncoding: 'gzip' },
         });
