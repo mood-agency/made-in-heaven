@@ -380,6 +380,11 @@ export default function UrlDetail() {
   const { data: urls } = useUrls();
   const urlData = urls?.find((u) => u.id === urlId);
 
+  type DatePreset = '7d' | '30d' | '90d' | 'all' | 'custom';
+  const [datePreset, setDatePreset] = useState<DatePreset>('30d');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
   const isoToday = new Date().toISOString().slice(0, 10);
   function daysAgoISO(n: number) {
     const d = new Date();
@@ -411,11 +416,6 @@ export default function UrlDetail() {
   const [editingInfo, setEditingInfo] = useState(false);
   const [localName, setLocalName] = useState('');
   const [localUrl, setLocalUrl] = useState('');
-
-  type DatePreset = '7d' | '30d' | '90d' | 'all' | 'custom';
-  const [datePreset, setDatePreset] = useState<DatePreset>('30d');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
 
   function startEditingInfo() {
     setLocalName(urlData?.name ?? '');
