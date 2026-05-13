@@ -121,6 +121,11 @@ export default function QueueDrawer({ queueState, urls }: Props) {
                   <button
                     onClick={() => {
                       const ids = entries.filter((e) => e.status === 'failed').map((e) => e.urlId);
+                      setDismissed(new Set(
+                        entries
+                          .filter((e) => e.status === 'done' || e.status === 'cancelled')
+                          .map((e) => e.urlId),
+                      ));
                       analyzeSelected.mutate(ids);
                     }}
                     disabled={analyzeSelected.isPending}
