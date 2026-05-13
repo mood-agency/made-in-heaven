@@ -296,10 +296,14 @@ const router = new Hono<{ Variables: Variables }>()
     const db = c.var.db;
     const { ids } = c.req.valid('json');
 
-    const selectedUrls = await db
-      .select()
-      .from(urls)
-      .where(and(inArray(urls.id, ids), eq(urls.isActive, true)));
+    // D1 limits bound parameters to 100 per statement; leave 1 slot for is_active
+    const D1_IN_LIMIT = 99;
+    const chunks: number[][] = [];
+    for (let i = 0; i < ids.length; i += D1_IN_LIMIT) chunks.push(ids.slice(i, i + D1_IN_LIMIT));
+    const rows = await Promise.all(
+      chunks.map((chunk) => db.select().from(urls).where(and(inArray(urls.id, chunk), eq(urls.isActive, true)))),
+    );
+    const selectedUrls = rows.flat();
 
     const enqueueBatch = c.var.enqueueBatchAnalysis;
     if (enqueueBatch) {
